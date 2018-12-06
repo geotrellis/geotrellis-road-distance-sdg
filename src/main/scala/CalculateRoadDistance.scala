@@ -5,9 +5,12 @@ import geotrellis.raster.rasterize._
 import geotrellis.vector._
 import geotrellis.proj4._
 import geotrellis.spark._
+import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark.tiling._
 import geotrellis.spark.partition.SpacePartitioner
+import geotrellis.spark.io._
 import geotrellis.spark.io.hadoop._
+import geotrellis.spark.io.index.ZCurveKeyIndexMethod
 import geotrellis.spark.io.kryo._
 
 import osmesa.common.ProcessOSM
@@ -82,12 +85,33 @@ object CalculateRoadDistance {
 
     val options: Rasterizer.Options = Rasterizer.Options(true, PixelIsArea)
 
-    val maskedRDD: RDD[(SpatialKey, Tile)] =
-      joinedRDD.mapPartitions({ partition =>
-        partition.map { case (k, (v, geoms)) =>
-          (k, v.mask(mapTransform(k), geoms, options))
-        }
-      }, preservesPartitioning = true
-    )
+    val maskedRDD: TileLayerRDD[SpatialKey] =
+      ContextRDD(
+        joinedRDD.mapPartitions({ partition =>
+          partition.map { case (k, (v, geoms)) =>
+            (k, v.mask(mapTransform(k), geoms, options))
+          }
+        }, preservesPartitioning = true),
+        md
+      )
+
+    val targetZoom = 13
+    val scheme = ZoomedLayoutScheme(WebMercator)
+    val targetLayout = scheme.levelForZoom(targetZoom).layout
+
+    val (_, reprojectedRDD) = maskedRDD.reproject(WebMercator, targetLayout)
+
+    val pyramid: Stream[(Int, TileLayerRDD[SpatialKey])] =
+      Pyramid.levelStream(reprojectedRDD, scheme, startZoom = targetZoom, endZoom = 0)
+
+    val writer = LayerWriter("file:///tmp/sdg-output")
+
+    pyramid.foreach { case (z, layer) =>
+      writer.write(LayerId("djibouti-sdg-epsg3857", z), layer, ZCurveKeyIndexMethod)
+    }
+
+    writer.write(LayerId("djibouti-sdg-native", 0), maskedRDD, ZCurveKeyIndexMethod)
+
+    ss.stop
   }
 }
