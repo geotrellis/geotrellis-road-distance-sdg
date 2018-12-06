@@ -1,0 +1,37 @@
+compile
+exit
+compile
+exit
+compile
+exit
+~ compile
+run Main
+run geotrellis.sdg.Main
+exit
+run geotrellis.sdg.Main
+run geotrellis.sdg.Main.run()
+run geotrellis.sdg.Main
+Main
+geotrellis.sdg.Main
+runMain geotrellis.sdg.Main
+run
+run blah
+reboot
+run blah
+run
+runMain
+runMain 
+runMain geotrellis.sdg.Main
+run
+exit
+compile
+runMain
+run
+reboot
+run
+runMain
+runMain geotrellis.sdg.Main
+run
+reboot
+run
+exit
