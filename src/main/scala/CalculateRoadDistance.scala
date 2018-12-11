@@ -6,9 +6,7 @@ import geotrellis.raster.histogram._
 import geotrellis.raster.io._
 import geotrellis.vector._
 import geotrellis.vector.reproject._
-import geotrellis.vector.io._
 import geotrellis.vector.io.wkt._
-import geotrellis.vector.io.json._
 import geotrellis.proj4._
 import geotrellis.proj4.util._
 import geotrellis.spark._
@@ -19,10 +17,6 @@ import geotrellis.spark.io._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark.io.index.ZCurveKeyIndexMethod
 import geotrellis.spark.io.kryo._
-
-import scala.collection.mutable.ArrayBuffer
-
-import java.io.{File, PrintWriter}
 
 import osmesa.common.ProcessOSM
 
@@ -79,7 +73,6 @@ object CalculateRoadDistance {
         .set("spark.task.maxFailures", "33")
         .set("spark.executor.extraJavaOptions", "-XX:+UseParallelGC")
 
-
     implicit val ss = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
     implicit val sc = ss.sparkContext
 
@@ -106,7 +99,6 @@ object CalculateRoadDistance {
 
     val md: TileLayerMetadata[SpatialKey] = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme())._2
     val mapTransform = md.layout.mapTransform
-    val buffer: Double = 0.000833333 * 2000.0
 
     val geomRDD: RDD[Geometry] =
       osmRoads
@@ -135,24 +127,6 @@ object CalculateRoadDistance {
     val tiledLayer: TileLayerRDD[SpatialKey] = rdd.tileToLayout(md)
 
     val clippedGeoms: RDD[(SpatialKey, Geometry)] = geomRDD.clipToGrid(md.layout)
-
-    /*
-    val geomCollection: GeometryCollection = GeometryCollection(clippedGeoms.values.collect())
-    val geoJson: String = geomCollection.toGeoJson()
-
-    val pw1 = new PrintWriter(new File("/tmp/djibouti-road-geoms-4326.json"))
-    val pw2 = new PrintWriter(new File("/tmp/djibouti-road-geoms-3857.json"))
-
-    try {
-      pw1.write(geoJson)
-      pw2.write(Reproject(geomCollection, LatLng, WebMercator).toGeoJson())
-    } finally {
-      pw1.close()
-      pw2.close()
-    }
-
-    geomRDD.unpersist()
-    */
 
     val groupedClippedGeoms: RDD[(SpatialKey, Iterable[Geometry])] = clippedGeoms.groupByKey(partitioner)
 
