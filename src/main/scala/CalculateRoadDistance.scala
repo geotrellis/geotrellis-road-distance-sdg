@@ -29,6 +29,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.udf
 
 
 object CalculateRoadDistance {
@@ -88,8 +89,8 @@ object CalculateRoadDistance {
     import ss.implicits._
 
     try {
-      //val osmData = ProcessOSM.constructGeometries(ss.read.orc("/tmp/djibouti.orc"))
-      val osmData = ProcessOSM.constructGeometries(ss.read.orc("/tmp/car.orc"))
+      val osmData = ProcessOSM.constructGeometries(ss.read.orc("/tmp/djibouti.orc"))
+      //val osmData = ProcessOSM.constructGeometries(ss.read.orc("/tmp/car.orc"))
 
       val osmRoadData =
         osmData
@@ -101,36 +102,46 @@ object CalculateRoadDistance {
         osmRoadData
             .where(
             osmRoadData("_type") === 2 &&
-            !osmRoadData("roadType").isin(badRoads:_*)// &&
-            //!osmRoadData("surfaceType").isin(badSurfaces:_*)
+            !osmRoadData("roadType").isin(badRoads:_*)
           )
 
-      //val rdd: RDD[(ProjectedExtent, Tile)] = HadoopGeoTiffRDD.spatial("/tmp/DJI15adjv4.tif")
-      val rdd: RDD[(ProjectedExtent, Tile)] = HadoopGeoTiffRDD.spatial("/tmp/car.tif")
+      val rdd: RDD[(ProjectedExtent, Tile)] = HadoopGeoTiffRDD.spatial("/tmp/DJI15adjv4.tif")
+      //val rdd: RDD[(ProjectedExtent, Tile)] = HadoopGeoTiffRDD.spatial("/tmp/car.tif")
 
       val md: TileLayerMetadata[SpatialKey] = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme())._2
       val mapTransform = md.layout.mapTransform
 
+      val bufferGeom: (JTSGeometry) => JTSGeometry =
+        (jtsGeom: JTSGeometry) => {
+          val center = jtsGeom.getCentroid()
+          val x = center.getX()
+          val y = center.getY()
+
+          val localCRS = UTM.getZoneCrs(x, y)
+
+          val transform = Transform(md.crs, localCRS)
+          val backTransform = Transform(localCRS, md.crs)
+
+          val gtGeom = WKT.read(jtsGeom.toText)
+
+          val reprojected = Reproject(gtGeom, transform)
+          val buffered = reprojected.jtsGeom.buffer(20.0)
+
+          Reproject(buffered, backTransform).jtsGeom
+        }
+
+      val bufferGeomUDF = udf(bufferGeom)
+
+      val osmBufferedRoads =
+        osmRoads.withColumn("bufferedGeom", bufferGeomUDF(osmRoads.col("geom")))
+
       val geomRDD: RDD[VTF[Geometry]] =
-        osmRoads
+        osmBufferedRoads
           .rdd
           .map { geomRow =>
             val jtsGeom = geomRow.getAs[JTSGeometry]("geom")
-            val center = jtsGeom.getCentroid()
-            val x = center.getX()
-            val y = center.getY()
 
-            val localCRS = UTM.getZoneCrs(x, y)
-
-            val transform = Transform(md.crs, localCRS)
-            val backTransform = Transform(localCRS, md.crs)
-
-            val gtGeom = WKT.read(jtsGeom.toText)
-
-            val reprojected = Reproject(gtGeom, transform)
-            val buffered = reprojected.jtsGeom.buffer(20)
-
-            val backProjected = Reproject(buffered, backTransform)
+            val bufferedJTSGeom = geomRow.getAs[JTSGeometry]("bufferedGeom")
 
             val roadType =
               geomRow.getAs[String]("roadType") match {
@@ -148,10 +159,11 @@ object CalculateRoadDistance {
               Map(
                 "__id" -> VString(geomRow.getAs[Long]("id").toString),
                 "roadType" -> VString(roadType),
-                "surfaceType" -> VString(surfaceType)
+                "surfaceType" -> VString(surfaceType),
+                "originalGeom" -> VString(jtsGeom.toText)
               )
 
-            Feature(backProjected, metadata)
+            Feature(Geometry(bufferedJTSGeom), metadata)
 
           }.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -196,16 +208,28 @@ object CalculateRoadDistance {
           partition.map { case (k, (v, features)) =>
             val tileExtent = mapTransform(k)
 
-            val updatedFeatures: Iterable[GenerateVT.VTF[Geometry]] =
+            val updatedFeatureData: Iterable[GenerateVT.VTF[Geometry]] =
               features.map { feature =>
                 val geomPop = caculatePop(v.mask(tileExtent, feature.geom, options))
-                //val updatedData = feature.data ++: Map("population" -> VString(geomPop.toString))
-                val updatedData = feature.data ++: Map("population" -> VDouble(geomPop))
+                val updatedData =
+                  feature.data ++: Map("population" -> VDouble(geomPop))
 
                 feature.copy(data = updatedData)
               }
 
-            (k, (v.mask(tileExtent, updatedFeatures.map { _.geom }, options), updatedFeatures))
+            val maskedTile = v.mask(tileExtent, updatedFeatureData.map { _.geom }, options)
+
+            val gtGeomFeatures =
+              updatedFeatureData.map { feature =>
+                val wkt = feature.data.get("originalGeom").get.asInstanceOf[VString].value
+                val gtGeom = WKT.read(wkt)
+
+                val updatedData = feature.data - "originalGeom"
+
+                feature.copy(geom = gtGeom, data = updatedData)
+              }
+
+            (k, (maskedTile, gtGeomFeatures))
           }
         }, preservesPartitioning = true).persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -235,39 +259,12 @@ object CalculateRoadDistance {
           GenerateVT.keyToLayout(featuresRDD, layout)
 
         val vectorTilesRDD: RDD[(SpatialKey, VectorTile)] =
-          //GenerateVT.makeVectorTiles(keyedFeaturesRDD, layout, "djibouti-roads")
-          GenerateVT.makeVectorTiles(keyedFeaturesRDD, layout, "car-roads")
+          GenerateVT.makeVectorTiles(keyedFeaturesRDD, layout, "djibouti-roads")
+          //GenerateVT.makeVectorTiles(keyedFeaturesRDD, layout, "car-roads")
 
-        //GenerateVT.save(vectorTilesRDD, z, "geotrellis-test", "sdg/djibouti/vectortiles")
-        GenerateVT.saveHadoop(vectorTilesRDD, z, "file:///tmp/sdg-output/car-road-vectortiles")
+        GenerateVT.save(vectorTilesRDD, z, "geotrellis-test", "sdg/djibouti/line-vectortiles")
+        //GenerateVT.saveHadoop(vectorTilesRDD, z, "file:///tmp/sdg-output/djibouti-road-vectortiles")
       }
-
-      /*
-      val (_, reprojectedRDD) =
-        maskedRDD
-          .reproject(
-            WebMercator,
-            targetLayout
-          )
-
-      val pyramid: Stream[(Int, TileLayerRDD[SpatialKey])] =
-        Pyramid.levelStream(reprojectedRDD, scheme, startZoom = targetZoom, endZoom = 0)
-
-      val writer = LayerWriter("file:///tmp/sdg-output")
-
-      pyramid.foreach { case (z, layer) =>
-        if (z == targetZoom) {
-          val store = writer.attributeStore
-          val hist = layer.histogram
-
-          store.write(LayerId("djibouti-sdg-all-weather-roads-2015-epsg3857", z), "histogram", hist)
-        }
-
-        writer.write(LayerId("djibouti-sdg-all-weather-roads-2015-epsg3857", z), layer, ZCurveKeyIndexMethod)
-      }
-
-      writer.write(LayerId("djibouti-sdg-2015-native", 0), maskedRDD, ZCurveKeyIndexMethod)
-      */
 
       maskedRDD.unpersist()
     } finally {
