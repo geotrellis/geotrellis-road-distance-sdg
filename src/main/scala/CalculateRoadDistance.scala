@@ -88,7 +88,8 @@ object CalculateRoadDistance {
     import ss.implicits._
 
     try {
-      val osmData = ProcessOSM.constructGeometries(ss.read.orc("/tmp/djibouti.orc"))
+      //val osmData = ProcessOSM.constructGeometries(ss.read.orc("/tmp/djibouti.orc"))
+      val osmData = ProcessOSM.constructGeometries(ss.read.orc("/tmp/car.orc"))
 
       val osmRoadData =
         osmData
@@ -100,11 +101,12 @@ object CalculateRoadDistance {
         osmRoadData
             .where(
             osmRoadData("_type") === 2 &&
-            !osmRoadData("roadType").isin(badRoads:_*) &&
-            !osmRoadData("surfaceType").isin(badSurfaces:_*)
+            !osmRoadData("roadType").isin(badRoads:_*)// &&
+            //!osmRoadData("surfaceType").isin(badSurfaces:_*)
           )
 
-      val rdd: RDD[(ProjectedExtent, Tile)] = HadoopGeoTiffRDD.spatial("/tmp/DJI15adjv4.tif")
+      //val rdd: RDD[(ProjectedExtent, Tile)] = HadoopGeoTiffRDD.spatial("/tmp/DJI15adjv4.tif")
+      val rdd: RDD[(ProjectedExtent, Tile)] = HadoopGeoTiffRDD.spatial("/tmp/car.tif")
 
       val md: TileLayerMetadata[SpatialKey] = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme())._2
       val mapTransform = md.layout.mapTransform
@@ -130,11 +132,23 @@ object CalculateRoadDistance {
 
             val backProjected = Reproject(buffered, backTransform)
 
+            val roadType =
+              geomRow.getAs[String]("roadType") match {
+                case null => "null"
+                case s: String => s
+              }
+
+            val surfaceType =
+              geomRow.getAs[String]("surfaceType") match {
+                case null => "null"
+                case s: String => s
+              }
+
             val metadata =
               Map(
                 "__id" -> VString(geomRow.getAs[Long]("id").toString),
-                "roadType" -> VString(geomRow.getAs[String]("roadType")),
-                "surfaceType" -> VString(geomRow.getAs[String]("surfaceType"))
+                "roadType" -> VString(roadType),
+                "surfaceType" -> VString(surfaceType)
               )
 
             Feature(backProjected, metadata)
@@ -145,6 +159,7 @@ object CalculateRoadDistance {
 
       val tiledLayer: TileLayerRDD[SpatialKey] = rdd.tileToLayout(md)
 
+      /*
       val totalPop: Double = {
         tiledLayer
           .values
@@ -157,6 +172,7 @@ object CalculateRoadDistance {
           }
           .reduce { _ + _ }
       }
+      */
 
       val clippedGeoms: RDD[(SpatialKey, VTF[Geometry])] = geomRDD.clipToGrid(md.layout)
 
@@ -183,7 +199,8 @@ object CalculateRoadDistance {
             val updatedFeatures: Iterable[GenerateVT.VTF[Geometry]] =
               features.map { feature =>
                 val geomPop = caculatePop(v.mask(tileExtent, feature.geom, options))
-                val updatedData = feature.data ++: Map("population" -> VString(geomPop.toString))
+                //val updatedData = feature.data ++: Map("population" -> VString(geomPop.toString))
+                val updatedData = feature.data ++: Map("population" -> VDouble(geomPop))
 
                 feature.copy(data = updatedData)
               }
@@ -211,18 +228,21 @@ object CalculateRoadDistance {
       val scheme = ZoomedLayoutScheme(WebMercator)
       val targetLayout = scheme.levelForZoom(targetZoom).layout
 
-      val keyedFeaturesRDD: RDD[(SpatialKey, (SpatialKey, GenerateVT.VTF[Geometry]))] =
-        GenerateVT.keyToLayout(featuresRDD, targetLayout)
-
-      for (z <- 14 to 0) {
+      for (z <- 0 to 14) {
         val layout = scheme.levelForZoom(z).layout
 
-        val vectorTilesRDD: RDD[(SpatialKey, VectorTile)] =
-          GenerateVT.makeVectorTiles(keyedFeaturesRDD, layout, "djibouti-roads")
+        val keyedFeaturesRDD: RDD[(SpatialKey, (SpatialKey, GenerateVT.VTF[Geometry]))] =
+          GenerateVT.keyToLayout(featuresRDD, layout)
 
-        GenerateVT.saveHadoop(vectorTilesRDD, z, "file:///tmp/sdg-output/road-vectortiles")
+        val vectorTilesRDD: RDD[(SpatialKey, VectorTile)] =
+          //GenerateVT.makeVectorTiles(keyedFeaturesRDD, layout, "djibouti-roads")
+          GenerateVT.makeVectorTiles(keyedFeaturesRDD, layout, "car-roads")
+
+        //GenerateVT.save(vectorTilesRDD, z, "geotrellis-test", "sdg/djibouti/vectortiles")
+        GenerateVT.saveHadoop(vectorTilesRDD, z, "file:///tmp/sdg-output/car-road-vectortiles")
       }
 
+      /*
       val (_, reprojectedRDD) =
         maskedRDD
           .reproject(
@@ -246,7 +266,8 @@ object CalculateRoadDistance {
         writer.write(LayerId("djibouti-sdg-all-weather-roads-2015-epsg3857", z), layer, ZCurveKeyIndexMethod)
       }
 
-      //writer.write(LayerId("djibouti-sdg-2015-native", 0), maskedRDD, ZCurveKeyIndexMethod)
+      writer.write(LayerId("djibouti-sdg-2015-native", 0), maskedRDD, ZCurveKeyIndexMethod)
+      */
 
       maskedRDD.unpersist()
     } finally {
