@@ -24,7 +24,7 @@ import geotrellis.spark.io.kryo._
 
 import org.locationtech.geomesa.spark.jts._
 
-import osmesa.GenerateVT
+//import osmesa.GenerateVT
 import osmesa.common.ProcessOSM
 
 import com.vividsolutions.jts.geom.{Geometry => JTSGeometry}

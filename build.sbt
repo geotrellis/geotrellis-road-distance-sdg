@@ -3,12 +3,13 @@ version := "0.1"
 scalaVersion := "2.11.11"
 organization := "geotrellis"
 
+scalacOptions := Seq("-feature")
+
 libraryDependencies ++= Seq(
-  //"org.locationtech.geotrellis" %% "geotrellis-shapefile" % "2.0.0",
-  "com.azavea" %% "osmesa" % "0.3.0",
-  "com.azavea" %% "osmesa-common" % "0.3.0",
-  "org.apache.spark" %% "spark-core" % "2.3.2" % "provided",
-  "org.apache.spark" %% "spark-hive" % "2.3.2" % "provided"//,
+  //"com.azavea" %% "osmesa" % "0.3.0",
+  "com.azavea" %% "osmesa-common" % "0.3.0-SNAPSHOT",
+  "org.apache.spark" %% "spark-core" % "2.3.1" % "provided",
+  "org.apache.spark" %% "spark-hive" % "2.3.1" % "provided"//,
   //"org.apache.spark" %% "spark-sql" % "2.3.2",// % "provided"//,
   //"com.monovore" %% "decline" % "0.5.0"
 )
@@ -29,7 +30,9 @@ assemblyShadeRules in assembly := {
     ShadeRule.rename("com.fasterxml.jackson.**" -> s"$shadePackage.com.fasterxml.jackson.@1")
       .inLibrary("com.networknt" % "json-schema-validator" % "0.1.7").inAll,
     ShadeRule.rename("org.apache.avro.**" -> s"$shadePackage.org.apache.avro.@1")
-      .inLibrary("com.azavea.geotrellis" %% "geotrellis-spark" % gtVersion).inAll
+      .inLibrary("com.azavea.geotrellis" %% "geotrellis-spark" % gtVersion).inAll,
+    ShadeRule.rename("com.typesafe.scalalogging.**" -> s"$shadePackage.com.typesafe.scalalogging.@1")
+      .inLibrary("org.locationtech.geotrellis" %% "geotrellis-spark" % gtVersion).inAll
   )
 }
 
@@ -42,7 +45,7 @@ assemblyMergeStrategy in assembly := {
   case _ => MergeStrategy.first
 }
 
-sparkInstanceCount          := 31
+sparkInstanceCount          := 21
 sparkMasterType             := "m4.2xlarge"
 sparkCoreType               := "m4.2xlarge"
 sparkMasterPrice            := Some(0.15)
@@ -67,19 +70,20 @@ sparkEmrConfigs := Seq(
   EmrConfig("spark").withProperties(
     "maximizeResourceAllocation" -> "true"),
   EmrConfig("spark-defaults").withProperties(
-  "spark.driver.memory" -> "4G",
-  "spark.executor.memory" -> "4G",
-  "spark.driver.maxResultSize" -> "8G",
-  "spark.executor.maxResultSize" -> "5G",
+  //"spark.driver.memory" -> "4G",
+  //"spark.executor.memory" -> "4G",
+  //"spark.driver.maxResultSize" -> "8G",
+  //"spark.executor.maxResultSize" -> "5G",
   "spark.dynamicAllocation.enabled" -> "true",
   "spark.shuffle.service.enabled" -> "true",
   "spark.shuffle.compress" -> "true",
   "spark.shuffle.spill.compress" -> "true",
   "spark.rdd.compress" -> "true",
-  "spark.default.parallelism" -> "15000",
+  "spark.default.parallelism" -> "1500",
   //"spark.yarn.am.memory" -> "4g",
   //"spark.yarn.am.memoryOverhead" -> "4g",
-  "spark.executor.extraJavaOptions" -> "-XX:+UseParallelGC -Dgeotrellis.s3.threads.rdd.write=64"),
+  //"spark.executor.extraJavaOptions" -> "-XX:+UseParallelGC -Dgeotrellis.s3.threads.rdd.write=64"),
+  "spark.executor.extraJavaOptions" -> "-XX:+UseParallelGC"),
   EmrConfig("yarn-site").withProperties(
     "yarn.resourcemanager.am.max-attempts" -> "1",
     "yarn.nodemanager.vmem-check-enabled" -> "false",

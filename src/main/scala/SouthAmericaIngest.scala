@@ -26,7 +26,7 @@ import geotrellis.spark.io.s3.S3Client
 
 import org.locationtech.geomesa.spark.jts._
 import org.locationtech.geomesa.spark.jts.udf.GeometricConstructorFunctions
-import osmesa.GenerateVT
+//import osmesa.GenerateVT
 import osmesa.common.ProcessOSM
 
 import com.vividsolutions.jts.geom.{Geometry => JTSGeometry, LineString}
@@ -50,6 +50,8 @@ object SouthAmericaIngest {
   type VTF[G <: Geometry] = Feature[G, Map[String, VString]]
 
   val southAmericaExtent = Extent(-98.96484375, -57.89149735271031, -28.652343749999996, 15.623036831528264)
+  //val roads = List("motorway", "trunk")//, "primary")
+  val roads = List("motorway", "trunk", "primary", "secondary", "tertiary")
 
   val badSurfaces: List[String] =
     List(
@@ -82,7 +84,8 @@ object SouthAmericaIngest {
     System.setSecurityManager(null)
 
     val targetFileName = "south-america"
-    val numPartitions = 15000
+    val numPartitions = 2000
+    //val numPartitions = 1000
 
     val conf =
       new SparkConf()
@@ -94,14 +97,15 @@ object SouthAmericaIngest {
         .set("spark.sql.shuffle.partitions", numPartitions.toString)
         .set("spark.sql.broadcastTimeout", "36000")
         .set("spark.default.parallelism", numPartitions.toString)
-        .set("spark.executor.memory", "8g")
+        //.set("spark.executor.memory", "8g")
         .set("spark.driver.memory", "8g")
-        .set("spark.yarn.am.memory", "8g")
-        .set("spark.yarn.am.memoryOverhead", "8g")
-        .set("spark.driver.memoryOverhead", "8g")
-        .set("spark.executor.memoryOverhead", "6g")
+        //.set("spark.yarn.am.memory", "8g")
+        //.set("spark.yarn.am.memoryOverhead", "8g")
+        //.set("spark.driver.memoryOverhead", "8g")
+        //.set("spark.executor.memoryOverhead", "6g")
         .set("spark.network.timeout", "600")
-        .set("spark.executor.heartbeatInterval", "100")
+        //.set("spark.executor.heartbeatInterval", "100")
+        .set("spark.executor.extraJavaOptions", "-XX:+UseParallelGC")
         //.set("spark.executor.extraJavaOptions", "-XX:+UseG1GC -XX:-ResizePLAB -XX:InitiatingHeapOccupancyPercent=35")
 
     implicit val ss = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
@@ -110,11 +114,8 @@ object SouthAmericaIngest {
     ss.withJTS
 
     try {
-
-      /*
       val countries: Seq[MultiPolygonFeature[Map[String, String]]] =
         GeoJsonReader.readFromS3("un-sdg", "south-america/south-america-country-populations-epsg4326.geojson")
-      b
 
       val osmData = ProcessOSM.constructGeometries(ss.read.orc(s"s3://un-sdg/south-america/${targetFileName}.orc"))
 
@@ -133,8 +134,10 @@ object SouthAmericaIngest {
           .where(
             (osmRoadData("geom").isNotNull && isValidUDF(osmRoadData("geom"))) &&
             osmRoadData("_type") === 2 &&
-            !osmRoadData("roadType").isin(badRoads:_*)
-          )
+            (osmRoadData("roadType").isNotNull && osmRoadData("roadType").isin(roads:_*))
+            //osmRoadData("roadType").isin(roads:_*)
+            //!osmRoadData("roadType").isin(badRoads:_*)
+          )//.repartition(numPartitions)
 
       val bufferGeom: (JTSGeometry) => JTSGeometry =
         (jtsGeom: JTSGeometry) => {
@@ -321,6 +324,7 @@ object SouthAmericaIngest {
           }
         }, preservesPartitioning = true)///.persist(StorageLevel.MEMORY_AND_DISK)
 
+      /*
       val schema =
         new StructType()
           .add(StructField("__id", StringType, nullable = false))
@@ -350,7 +354,6 @@ object SouthAmericaIngest {
       val updatedDF: DataFrame = ss.createDataFrame(rowRDD, schema)
 
       updatedDF.write.format("orc").save("s3a://un-sdg/south-america/south-america-road-and-population-data-2015-epsg4326.orc")
-      */
 
       //rowRDD.unpersist()
 
@@ -377,7 +380,6 @@ object SouthAmericaIngest {
           //.persist(StorageLevel.MEMORY_AND_DISK)
 
       //val roads = List("motorway", "trunk", "primary", "secondary")
-      val roads = List("motorway", "trunk")
 
       val osmRoads =
         osmData
@@ -408,8 +410,8 @@ object SouthAmericaIngest {
           }//.persist(StorageLevel.MEMORY_AND_DISK)
 
       //osmData.unpersist()
+      */
 
-      /*
       val featuresRDD: RDD[GenerateVT.VTF[Geometry]] =
         updatedRDD.mapValues { case (_, features) =>
           features.map { feature =>
@@ -418,7 +420,6 @@ object SouthAmericaIngest {
             feature.copy(geom = reprojected)
           }
         }.values.flatMap { f => f }
-      */
 
       val targetZoom = 6
       val scheme = ZoomedLayoutScheme(WebMercator)
@@ -463,6 +464,32 @@ object SouthAmericaIngest {
 
       //osmData.unpersist()
 
+      //println(s"\n\n\n !!!!!! ${geomRDD.count()} !!!!! \n\n\n")
+
+      val layout = scheme.levelForZoom(targetZoom).layout
+
+      val keyedFeaturesRDD: RDD[(SpatialKey, (SpatialKey, GenerateVT.VTF[Geometry]))] =
+        GenerateVT.keyToLayout(featuresRDD, layout)
+
+      val vectorTilesRDD: RDD[(SpatialKey, VectorTile)] =
+        GenerateVT
+          .makeVectorTiles(keyedFeaturesRDD, layout, s"${targetFileName}-roads")
+          //.zipWithIndex
+          //.filter { case (_, index) => index < 100 }
+          //.map { case (values, _) => values }
+
+      /*
+      val maxTileFeaturecount = vectorTilesRDD.map{ case (_, vt) =>
+        vt.layers(s"${targetFileName}-roads").features.length
+      }.reduce( math.max )
+
+      println(s"!!!! MAX Features: $maxTileFeaturecount !!!!!")
+      */
+
+      //GenerateVT.save(vectorTilesRDD, targetZoom, "un-sdg", s"south-america/${targetFileName}-vectortiles")
+      GenerateVT.save(vectorTilesRDD, targetZoom, "un-sdg", s"south-america/test-8-vectortiles")
+
+      /*
       for (z <- 6 to 3 by -1) {
         val layout = scheme.levelForZoom(z).layout
 
@@ -476,6 +503,7 @@ object SouthAmericaIngest {
 
         //vectorTilesRDD.unpersist()
       }
+      */
 
       //keyedFeaturesRDD.unpersist()
 
