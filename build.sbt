@@ -25,14 +25,14 @@ test in assembly := {}
 
 assemblyShadeRules in assembly := {
   val shadePackage = "geotrellis.sdg.shaded"
-  val gtVersion = "2.0.0"
+  val gtVersion = "2.1.0"
   Seq(
     ShadeRule.rename("com.fasterxml.jackson.**" -> s"$shadePackage.com.fasterxml.jackson.@1")
       .inLibrary("com.networknt" % "json-schema-validator" % "0.1.7").inAll,
     ShadeRule.rename("org.apache.avro.**" -> s"$shadePackage.org.apache.avro.@1")
       .inLibrary("com.azavea.geotrellis" %% "geotrellis-spark" % gtVersion).inAll,
     ShadeRule.rename("com.typesafe.scalalogging.**" -> s"$shadePackage.com.typesafe.scalalogging.@1")
-      .inLibrary("org.locationtech.geotrellis" %% "geotrellis-spark" % gtVersion).inAll
+      .inLibrary("org.locationtech.geotrellis" %% "geotrellis-vector" % gtVersion).inProject
   )
 }
 
