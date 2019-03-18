@@ -32,7 +32,9 @@ assemblyShadeRules in assembly := {
     ShadeRule.rename("org.apache.avro.**" -> s"$shadePackage.org.apache.avro.@1")
       .inLibrary("com.azavea.geotrellis" %% "geotrellis-spark" % gtVersion).inAll,
     ShadeRule.rename("com.typesafe.scalalogging.**" -> s"$shadePackage.com.typesafe.scalalogging.@1")
-      .inLibrary("org.locationtech.geotrellis" %% "geotrellis-vector" % gtVersion).inProject
+      .inLibrary("org.locationtech.geotrellis" %% "geotrellis-vector" % gtVersion).inProject,
+    ShadeRule.rename("com.trueaccord.scalapb.**" -> s"$shadePackage.com.trueaccord.scalapb.@1")
+      .inLibrary("org.locationtech.geotrellis" %% "geotrellis-vectortile" % gtVersion).inProject
   )
 }
 
