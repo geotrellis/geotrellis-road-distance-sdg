@@ -5,10 +5,11 @@ organization := "geotrellis"
 
 libraryDependencies ++= Seq(
   //"org.locationtech.geotrellis" %% "geotrellis-shapefile" % "2.0.0",
+  "org.xerial" % "sqlite-jdbc" % "3.28.0",
   "com.azavea" %% "osmesa" % "0.3.0",
   "com.azavea" %% "osmesa-common" % "0.3.0",
-  "org.apache.spark" %% "spark-core" % "2.3.2" % "provided",
-  "org.apache.spark" %% "spark-hive" % "2.3.2" % "provided"//,
+  "org.apache.spark" %% "spark-core" % "2.3.2", //% "provided",
+  "org.apache.spark" %% "spark-hive" % "2.3.2", //% "provided"//,
   //"org.apache.spark" %% "spark-sql" % "2.3.2",// % "provided"//,
   //"com.monovore" %% "decline" % "0.5.0"
 )
