@@ -47,6 +47,7 @@ import scala.collection.JavaConverters._
 
 
 object SouthAmericaIngest {
+/*
   type VTF[G <: Geometry] = Feature[G, Map[String, VString]]
 
   val southAmericaExtent = Extent(-98.96484375, -57.89149735271031, -28.652343749999996, 15.623036831528264)
@@ -111,7 +112,6 @@ object SouthAmericaIngest {
 
     try {
 
-      /*
       val countries: Seq[MultiPolygonFeature[Map[String, String]]] =
         GeoJsonReader.readFromS3("un-sdg", "south-america/south-america-country-populations-epsg4326.geojson")
       b
@@ -350,7 +350,6 @@ object SouthAmericaIngest {
       val updatedDF: DataFrame = ss.createDataFrame(rowRDD, schema)
 
       updatedDF.write.format("orc").save("s3a://un-sdg/south-america/south-america-road-and-population-data-2015-epsg4326.orc")
-      */
 
       //rowRDD.unpersist()
 
@@ -409,7 +408,6 @@ object SouthAmericaIngest {
 
       //osmData.unpersist()
 
-      /*
       val featuresRDD: RDD[GenerateVT.VTF[Geometry]] =
         updatedRDD.mapValues { case (_, features) =>
           features.map { feature =>
@@ -418,7 +416,6 @@ object SouthAmericaIngest {
             feature.copy(geom = reprojected)
           }
         }.values.flatMap { f => f }
-      */
 
       val targetZoom = 6
       val scheme = ZoomedLayoutScheme(WebMercator)
@@ -431,7 +428,6 @@ object SouthAmericaIngest {
 
       //updatedRDD.unpersist()
 
-      /*
       def produceRDDs(
         rdd: RDD[(SpatialKey, (SpatialKey, GenerateVT.VTF[Geometry]))],
         zoom: Int
@@ -444,9 +440,7 @@ object SouthAmericaIngest {
           List((zoom, rdd))
         else
           List[(Int, RDD[(SpatialKey, (SpatialKey, GenerateVT.VTF[Geometry]))])]()
-        */
 
-       /*
       val rdds = produceRDDs(keyedFeaturesRDD, targetZoom)
 
       rdds.foreach { case (z, vt) =>
@@ -459,7 +453,6 @@ object SouthAmericaIngest {
 
         //vt.unpersist()
       }
-      */
 
       //osmData.unpersist()
 
@@ -501,4 +494,5 @@ object SouthAmericaIngest {
       case e: java.lang.UnsupportedOperationException => 1
     }
   }
+*/
 }
