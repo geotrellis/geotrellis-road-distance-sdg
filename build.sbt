@@ -4,21 +4,26 @@ scalaVersion := "2.11.11"
 organization := "geotrellis"
 
 libraryDependencies ++= Seq(
-  //"org.locationtech.geotrellis" %% "geotrellis-shapefile" % "2.0.0",
+  "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.0.0-SNAPSHOT",
   "org.xerial" % "sqlite-jdbc" % "3.28.0",
-  "com.azavea" %% "osmesa" % "0.3.0",
-  "com.azavea" %% "osmesa-common" % "0.3.0",
-  "org.apache.spark" %% "spark-core" % "2.3.2", //% "provided",
-  "org.apache.spark" %% "spark-hive" % "2.3.2", //% "provided"//,
-  //"org.apache.spark" %% "spark-sql" % "2.3.2",// % "provided"//,
-  //"com.monovore" %% "decline" % "0.5.0"
+  "com.azavea.geotrellis" % "geotrellis-contrib-vlm_2.11" % "3.17.0",
+  //"com.azavea" %% "osmesa" % "0.3.0",
+  //"com.azavea" %% "osmesa-common" % "0.3.0",
+  "org.apache.spark" %% "spark-core" % "2.3.2",// % "provided",
+  "org.apache.spark" %% "spark-hive" % "2.3.2",// % "provided",
+  "com.monovore" %% "decline" % "0.5.0",
+  "org.locationtech.geomesa" %% "geomesa-spark-jts" % "2.3.0",
+  "org.locationtech.jts" % "jts-core" % "1.16.1",
+  "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.9.9"
 )
 
 externalResolvers := Seq(
   DefaultMavenRepository,
   "locationtech-releases" at "https://repo.locationtech.org/content/repositories/releases/",
   "locationtech-snapshots" at "https://repo.locationtech.org/content/repositories/snapshots/",
-  Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+  Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns),
+  Resolver.bintrayRepo("azavea", "geotrellis")
 )
 
 test in assembly := {}

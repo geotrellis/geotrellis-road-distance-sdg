@@ -1,5 +1,6 @@
 package geotrellis.sdg
 
+/*
 import geotrellis.raster._
 import geotrellis.raster.rasterize._
 import geotrellis.raster.histogram._
@@ -44,6 +45,7 @@ import spray.json._
 import DefaultJsonProtocol._
 
 import scala.collection.JavaConverters._
+*/
 
 
 object SouthAmericaIngest {

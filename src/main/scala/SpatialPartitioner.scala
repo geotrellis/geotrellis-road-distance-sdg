@@ -1,5 +1,6 @@
 package geotrellis.sdg
 
+/*
 import geotrellis.spark._
 import geotrellis.spark.io.index._
 import geotrellis.spark.io.index.zcurve._
@@ -27,3 +28,4 @@ object SpatialPartitioner {
   def apply[K: SpatialComponent](partitions: Int): SpatialPartitioner[K] =
     new SpatialPartitioner(partitions, 8)
 }
+*/

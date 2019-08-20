@@ -1,5 +1,6 @@
 package geotrellis.sdg
 
+/*
 import geotrellis.raster._
 import geotrellis.raster.rasterize._
 import geotrellis.raster.histogram._
@@ -41,7 +42,6 @@ import DefaultJsonProtocol._
 
 
 object CalculateRoadDistance {
-/*
   type VTF[G <: Geometry] = Feature[G, Map[String, VString]]
 
   val badSurfaces: List[String] =
@@ -624,5 +624,5 @@ object CalculateRoadDistance {
       ss.stop
     }
   }
-*/
 }
+*/
