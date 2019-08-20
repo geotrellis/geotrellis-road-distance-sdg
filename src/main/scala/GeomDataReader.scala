@@ -5,20 +5,16 @@ import geotrellis.proj4.util._
 import geotrellis.vector.{Extent, Geometry}
 import geotrellis.vector.reproject._
 import geotrellis.vectortile._
-import geotrellis.spark._
-import geotrellis.spark.io.kryo._
-import geotrellis.spark.tiling._
+import geotrellis.layer._
 
 import org.locationtech.geomesa.spark.jts._
-import org.locationtech.geomesa.spark.jts.udf.GeometricConstructorFunctions
 
-import com.vividsolutions.jts.geom.{Geometry => JTSGeometry}
+import org.locationtech.jts.geom.{Geometry => JTSGeometry}
 
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.sql.{SQLContext, DataFrame}
-//import org.apache.spark.sql.types._
-import org.apache.spark.sql.functions.{udf, explode}
+import org.apache.spark.sql.functions.{udf, explode, lit}
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.net.URI
@@ -26,7 +22,8 @@ import java.util.zip.GZIPInputStream
 
 
 object GeomDataReader {
-  def readAndFormat(targetPath: String, sqlContext: SQLContext, transform: MapKeyTransform): DataFrame = {
+  def readAndFormat(sqlContext: SQLContext, targetPath: String, transform: MapKeyTransform): DataFrame = {
+    val countryName: String = "djibouti" //targetPath.split("""\.""").head.toLowerCase
 
     // This DataFrame contains the vector tile data
     val tileDataFrame: DataFrame =
@@ -85,7 +82,7 @@ object GeomDataReader {
               case None => null
             }
 
-          (feat.geom.jtsGeom, featureType, roadType, surfaceType)
+          (feat.geom, featureType, roadType, surfaceType)
         }
       }
 
@@ -123,26 +120,33 @@ object GeomDataReader {
           (explodedDataFrame("roadType").isNotNull && explodedDataFrame("surfaceType").isNotNull)
         )
 
-    val bufferGeom: (JTSGeometry) => JTSGeometry =
+    val bufferGeoms: (JTSGeometry) => JTSGeometry =
       (geom: JTSGeometry) => {
         val latLngTransform = Transform(WebMercator, LatLng)
-        val latLngGeom = Reproject(Geometry(geom), latLngTransform)
+        val latLngGeom = Reproject(geom, latLngTransform)
 
-        val center = latLngGeom.jtsGeom.getCentroid()
+        val center = latLngGeom.getCentroid()
         val x = center.getX()
         val y = center.getY()
 
         val utmCRS = UTM.getZoneCrs(x, y)
-        val utmTransform = Transform(WebMercator, utmCRS)
+        val utmTransform = Transform(LatLng, utmCRS)
 
-        val utmGeom = Reproject(Geometry(geom), utmTransform)
+        val utmGeom = Reproject(latLngGeom, utmTransform)
+        val bufferedUTMGeom = utmGeom.buffer(2.0)
 
-        utmGeom.jtsGeom.buffer(2.0)
+        val backTransform = Transform(utmCRS, LatLng)
+
+        Reproject(bufferedUTMGeom, backTransform)
       }
 
-    val bufferGeomUDF = udf(bufferGeom)
+    val bufferGeomsUDF = udf(bufferGeoms)
 
-    filteredDataFrame
-      .withColumn("bufferGeom", filteredDataFrame.col("geom"))
+    val result =
+      filteredDataFrame
+        .withColumn("bufferedGeom", bufferGeomsUDF(filteredDataFrame.col("geom")))
+        .withColumn("countryName", lit(countryName))
+
+    result
   }
 }
