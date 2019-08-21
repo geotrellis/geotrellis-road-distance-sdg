@@ -5,7 +5,8 @@ object CountryDirectory {
   val countries: Array[(String, String)] =
     Array(
       ("oman", "omn"),
-      ("djibouti", "dji")
+      ("djibouti", "dji"),
+      ("east-timor", "tls")
     )
 
   def codeToName(code: String): String = {
@@ -23,7 +24,10 @@ object CountryDirectory {
   }
 
   def nameToCode(name: String): String = {
-    val lowerCaseName: String = name.toLowerCase
+    val lowerCaseName: String =
+      // convert the name to lowercase, and replace
+    // any "_" or " " in the name with "-"
+      name.toLowerCase.replaceAll("(_| )", "-")
 
     val filteredCountries: Array[(String, String)] =
       countries.filter { case (name, _) =>

@@ -22,8 +22,12 @@ import java.util.zip.GZIPInputStream
 
 
 object GeomDataReader {
-  def readAndFormat(sqlContext: SQLContext, targetPath: String, transform: MapKeyTransform): DataFrame = {
-    val countryName: String = "djibouti" //targetPath.split("""\.""").head.toLowerCase
+  def readAndFormat(
+    sqlContext: SQLContext,
+    targetPath: String,
+    countryCode: String,
+    transform: MapKeyTransform
+  ): DataFrame = {
 
     // This DataFrame contains the vector tile data
     val tileDataFrame: DataFrame =
@@ -120,33 +124,41 @@ object GeomDataReader {
           (explodedDataFrame("roadType").isNotNull && explodedDataFrame("surfaceType").isNotNull)
         )
 
-    val bufferGeoms: (JTSGeometry) => JTSGeometry =
-      (geom: JTSGeometry) => {
+    val bufferGeoms: (Geometry) => Geometry =
+      (geom: Geometry) => {
         val latLngTransform = Transform(WebMercator, LatLng)
         val latLngGeom = Reproject(geom, latLngTransform)
+
+        //println(s"\nThis is the WebMercator centroid: ${geom.getCentroid().toText()}")
 
         val center = latLngGeom.getCentroid()
         val x = center.getX()
         val y = center.getY()
 
+        //println(s"This is the latLng centroid reprojected from the WebMercator Geometry: ${center.toText()}")
+
         val utmCRS = UTM.getZoneCrs(x, y)
         val utmTransform = Transform(LatLng, utmCRS)
 
         val utmGeom = Reproject(latLngGeom, utmTransform)
+
+        //println(s"This is the UTM centroid reprojected from the LatLng Geometry: ${utmGeom.getCentroid().toText()}")
+
         val bufferedUTMGeom = utmGeom.buffer(2.0)
 
         val backTransform = Transform(utmCRS, LatLng)
 
-        Reproject(bufferedUTMGeom, backTransform)
+        val result = Reproject(bufferedUTMGeom, backTransform)
+
+        //println(s"This is the UTM centroid being reprojected back to LatLng: ${result.getCentroid().toText()}\n")
+
+        result
       }
 
     val bufferGeomsUDF = udf(bufferGeoms)
 
-    val result =
-      filteredDataFrame
-        .withColumn("bufferedGeom", bufferGeomsUDF(filteredDataFrame.col("geom")))
-        .withColumn("countryName", lit(countryName))
-
-    result
+    filteredDataFrame
+      .withColumn("bufferedGeom", bufferGeomsUDF(filteredDataFrame.col("geom")))
+      .withColumn("countryName", lit(CountryDirectory.codeToName(countryCode)))
   }
 }

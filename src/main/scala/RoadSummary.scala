@@ -11,9 +11,11 @@ import geotrellis.spark.store.kryo._
 import geotrellis.spark.clip._
 import geotrellis.layer._
 
+import geotrellis.contrib.vlm.spark.SpatialPartitioner
+
 import org.locationtech.geomesa.spark.jts._
 
-import org.locationtech.jts.geom.{Geometry => JTSGeometry, Polygon}
+import org.locationtech.jts.geom.{Geometry => JTSGeometry}
 
 import org.apache.commons.io.IOUtils
 
@@ -32,11 +34,12 @@ object RoadSummary extends CommandApp(
   name = "Road Population Summary",
   header = "Poduces population summary json",
   main = {
-    val orcFile = Opts.option[String]("orc-file", help = "The path to the orc file that should be read")
-    val countryFiles = Opts.options[String]("country", help = "The path to the country raster that should be read")
+    val orcFile = Opts.option[String]("input", help = "The path to the orc file that should be read")
+    val countryFiles = Opts.options[String]("country", help = "The Alpha-3 code for a country from the ISO 3166 standard")
     val outputPath = Opts.option[String]("output", help = "The path that the output should be written to")
+    val partitions = Opts.option[Int]("partitions", help = "The number of Spark partitions to use").withDefault(120)
 
-    (orcFile, countryFiles, outputPath).mapN { (targetFile, countryList, output) =>
+    (orcFile, countryFiles, outputPath, partitions).mapN { (targetFile, countryList, output, partitionNum) =>
       System.setSecurityManager(null)
 
       val conf =
@@ -47,7 +50,7 @@ object RoadSummary extends CommandApp(
           .set("spark.kryo.registrator", classOf[KryoRegistrator].getName)
           .set("spark.executor.memory", "8g")
           .set("spark.driver.memory", "8g")
-          .set("spark.default.parallelism", "120")
+          .set("spark.default.parallelism", partitionNum.toString)
 
       implicit val ss = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
       val sqlContext = ss.sqlContext
@@ -55,7 +58,7 @@ object RoadSummary extends CommandApp(
       ss.withJTS
 
       try {
-        val schema =
+        val inputSchema =
           new StructType()
             .add(StructField("zoom_level", IntegerType, nullable = false))
             .add(StructField("tile_column", IntegerType, nullable = false))
@@ -67,6 +70,7 @@ object RoadSummary extends CommandApp(
             .add(StructField("bufferedGeom", GeometryUDT, nullable = false))
             .add(StructField("countryName", StringType, nullable = false))
 
+        // OSM defines these surfaces as being paved.
         val pavedSurfaces: Array[String] =
           Array(
             "paved",
@@ -82,21 +86,23 @@ object RoadSummary extends CommandApp(
             "wood"
           )
 
+        val partitioner = SpatialPartitioner(partitionNum)
+
         val osmData: DataFrame =
           ss
             .read
-            .schema(schema)
+            .schema(inputSchema)
             .orc(targetFile)
 
         val pavedRoads: DataFrame =
           osmData.where(osmData("surfaceType").isin(pavedSurfaces:_*))
 
-        val pavedRoadsRDD: RDD[Feature[Geometry, Map[String, String]]] =
+        val pavedRoadsRDD: RDD[Feature[Geometry, String]] =
           pavedRoads.rdd.map { geomRow =>
             val geom = geomRow.getAs[JTSGeometry]("bufferedGeom")
             val name = geomRow.getAs[String]("countryName")
 
-            Feature(geom, Map("name" -> name))
+            Feature(geom, name)
           }
 
         val formatter = CountryFormatter(ss.sparkContext, countryList.toList)
@@ -109,30 +115,14 @@ object RoadSummary extends CommandApp(
 
         val transform = MapKeyTransform(md.crs, md.layout.layoutCols, md.layout.layoutRows)
 
-        val clippedGeoms: RDD[(SpatialKey, Feature[Geometry, Map[String, String]])] =
+        val clippedGeoms: RDD[(SpatialKey, Feature[Geometry, String])] =
           ClipToGrid(pavedRoadsRDD, md.layout)
 
-        val t = Transform(LatLng, WebMercator)
+        val groupedClippedGeoms: RDD[(SpatialKey, Iterable[Feature[Geometry, String]])] =
+          clippedGeoms.groupByKey(partitioner)
 
-        val keys = clippedGeoms.keys.collect()
-
-        val reprojectedKeys =
-          keys.map { key =>
-            Reproject(transform(key), t).getCentroid().toText()
-          }
-
-        println(s"\n\nThis is the extent of the layers: ${md.extent.toPolygon.toText()}\n")
-        println(s"\n\nThis is the bounds for the layer: ${md.bounds}\n")
-
-        reprojectedKeys.foreach { println }
-
-        /*
-        val groupedClippedGeoms: RDD[(SpatialKey, Iterable[Feature[Geometry, Map[String, String]]])] = clippedGeoms.groupByKey()
-
-        val joinedRDD: RDD[(SpatialKey, (MultibandTile, Iterable[Feature[Geometry, Map[String, String]]]))] =
-          countriesRDD.join(groupedClippedGeoms)
-
-        println(s"\n\nThis is the count of the joinedRDD: ${joinedRDD.count}\n\n")
+        val joinedRDD: RDD[(SpatialKey, (MultibandTile, Iterable[Feature[Geometry, String]]))] =
+          countriesRDD.join(groupedClippedGeoms, partitioner)
 
         val options: Rasterizer.Options = Rasterizer.Options(true, PixelIsArea)
 
@@ -142,7 +132,7 @@ object RoadSummary extends CommandApp(
           acc
         }
 
-        val countryPopulations: RDD[(String, Double)] =
+        val countryRoadPopulations: RDD[(String, Double)] =
           joinedRDD.flatMap { case (key, (tile, features)) =>
             val tileExtent: Extent = transform(key)
             val firstBand = tile.band(0)
@@ -151,18 +141,18 @@ object RoadSummary extends CommandApp(
               val maskedTile = firstBand.mask(tileExtent, feat.geom, options)
               val maskedPopulation = calculatePop(maskedTile)
 
-              (feat.data.get("name").get, maskedPopulation)
+              (feat.data, maskedPopulation)
             }
           }
 
-        val reducedCountryPopulations: RDD[(String, Double)] =
-          countryPopulations.reduceByKey { _ + _ }
+        val reducedCountryRoadPopulations: RDD[(String, Double)] =
+          countryRoadPopulations.reduceByKey({ _ + _ }, partitionNum)
 
         val mappedTotalPopulations: Map[String, Double] =
           formatter.mappedPopulations(countriesRDD)
 
         val rowRDD: RDD[Row] =
-          reducedCountryPopulations.map { case (code, roadPopulation) =>
+          reducedCountryRoadPopulations.map { case (code, roadPopulation) =>
             val totalPopulation = mappedTotalPopulations.get(code).get
 
             Row(CountryDirectory.codeToName(code), code, totalPopulation, roadPopulation)
@@ -177,10 +167,7 @@ object RoadSummary extends CommandApp(
 
         val populationDataFrame: DataFrame = ss.createDataFrame(rowRDD, outputSchema)
 
-        println(s"\n\n${populationDataFrame.show()}\n\n")
-
-        //populationDataFrame.write.json(output)
-      */
+        populationDataFrame.write.json(output)
 
       } finally {
         ss.sparkContext.stop

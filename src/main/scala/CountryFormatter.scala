@@ -1,6 +1,5 @@
 package geotrellis.sdg
 
-
 import geotrellis.layer._
 import geotrellis.raster._
 import geotrellis.raster.summary.polygonal.visitors.SumVisitor
@@ -13,6 +12,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
 
+// TODO: Come up with better name for this class
 case class CountryFormatter(sc: SparkContext, countryCodes: List[String]) {
   def readCountries: MultibandTileLayerRDD[SpatialKey] = {
     val rasterSources: Seq[RasterSource] = mappedRasterSources.values.toSeq
@@ -33,6 +33,7 @@ case class CountryFormatter(sc: SparkContext, countryCodes: List[String]) {
       countryCode -> RasterSource(path)
     }.toMap
 
+  // Calculates the total population of a country using the country's Extent.
   def mappedPopulations(countries: MultibandTileLayerRDD[SpatialKey]): Map[String, Double] =
     mappedRasterSources.map { case (code, rasterSource) =>
       code -> countries.polygonalSummaryValue(rasterSource.extent.toPolygon, SumVisitor).toOption.get.head.value
