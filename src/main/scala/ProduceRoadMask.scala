@@ -16,7 +16,7 @@ object ProduceRoadMask extends CommandApp(
   name = "Road Masking",
   header = "Poduces road geometries from OSM as an orc file",
   main = {
-    val mbtilesFile = Opts.option[String]("input", help = "The path to the mbtiles file that should be read")
+    val mbtilesFile = Opts.option[String]("osm-mbtiles", help = "The path to the mbtiles file that should be read")
     val country = Opts.option[String]("country", help = "The Alpha-3 code for a country from the ISO 3166 standard")
     val outputPath = Opts.option[String]("output", help = "The path that the resulting orc fil should be written to")
     val partitions = Opts.option[Int]("partitions", help = "The number of Spark partitions to use").withDefault(120)
@@ -40,7 +40,7 @@ object ProduceRoadMask extends CommandApp(
       ss.withJTS
 
       try {
-        val osmRoads: DataFrame = GeomDataReader.readAndFormat(sqlContext, targetFile, countryCode)
+        val osmRoads: DataFrame = MbTilesReader.readAndFormat(sqlContext, targetFile, countryCode)
 
         osmRoads.write.format("orc").save(output)
       } finally {

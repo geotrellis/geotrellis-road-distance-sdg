@@ -14,7 +14,7 @@ import org.apache.spark.sql.jts.GeometryUDT
 import java.io.PrintWriter
 
 
-object GeomUtility {
+object GeomTestingUtility {
   def main(args: Array[String]): Unit =
     dumpGeoms()
 

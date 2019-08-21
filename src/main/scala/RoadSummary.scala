@@ -34,9 +34,9 @@ object RoadSummary extends CommandApp(
   name = "Road Population Summary",
   header = "Poduces population summary json",
   main = {
-    val orcFile = Opts.option[String]("input", help = "The path to the orc file that should be read")
+    val orcFile = Opts.option[String]("orc", help = "The path to the orc file that contains the buffered OSM geometries")
     val countryFiles = Opts.options[String]("country", help = "The Alpha-3 code for a country from the ISO 3166 standard")
-    val outputPath = Opts.option[String]("output", help = "The path that the output should be written to")
+    val outputPath = Opts.option[String]("output", help = "The path that the resulting json should be written to")
     val partitions = Opts.option[Int]("partitions", help = "The number of Spark partitions to use").withDefault(120)
 
     (orcFile, countryFiles, outputPath, partitions).mapN { (targetFile, countryList, output, partitionNum) =>

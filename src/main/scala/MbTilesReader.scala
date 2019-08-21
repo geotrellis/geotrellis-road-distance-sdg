@@ -21,13 +21,12 @@ import java.net.URI
 import java.util.zip.GZIPInputStream
 
 
-object GeomDataReader {
+object MbTilesReader {
   def readAndFormat(
     sqlContext: SQLContext,
     targetPath: String,
     countryCode: String
   ): DataFrame = {
-
     val transform = MapKeyTransform(WebMercator, 4096, 4096)
 
     // This DataFrame contains the vector tile data
@@ -45,8 +44,8 @@ object GeomDataReader {
 
     // The data is sotred as pbf files, which are gziped vectortiles.
     // So we need to decompress the bytes in order to read them in.
-    val decompressBytes: (Array[Byte]) => Array[Byte] =
-      (compressedBytes: Array[Byte]) => {
+    val decompressBytesUDF =
+      udf((compressedBytes: Array[Byte]) => {
         val stream = new GZIPInputStream(new ByteArrayInputStream(compressedBytes))
         val output = new ByteArrayOutputStream()
 
@@ -59,16 +58,13 @@ object GeomDataReader {
         output.close
 
         result
-      }
-
-    val decompressBytesUDF = udf(decompressBytes)
+      })
 
     val uncompressedTileData: DataFrame =
       tileDataFrame.withColumn("uncompressed_data", decompressBytesUDF(tileDataFrame.col("tile_data")))
 
-    val produceData: (Array[Byte], Int, Int) => Array[(JTSGeometry, String, String, String)] =
-      (bytes: Array[Byte], col: Int, row: Int) => {
-
+    val produceDataUDF =
+      udf((bytes: Array[Byte], col: Int, row: Int) => {
         // The Y's stored in the mbtiles are reveresed, so we need to flip them
         val flippedRow: Int = (1 << 12) - row - 1
 
@@ -93,9 +89,7 @@ object GeomDataReader {
 
           (feat.geom, featureType, roadType, surfaceType)
         }
-      }
-
-    val produceDataUDF = udf(produceData)
+      })
 
     val geomDataFrame =
       uncompressedTileData
@@ -117,9 +111,7 @@ object GeomDataReader {
         .withColumnRenamed("_3", "roadType")
         .withColumnRenamed("_4", "surfaceType")
 
-    val isValid: (JTSGeometry) => Boolean = (jtsGeom: JTSGeometry) => jtsGeom.isValid()
-
-    val isValidUDF = udf(isValid)
+    val isValidUDF = udf((jtsGeom: JTSGeometry) => jtsGeom.isValid())
 
     val filteredDataFrame: DataFrame =
       explodedDataFrame
@@ -129,38 +121,26 @@ object GeomDataReader {
           (explodedDataFrame("roadType").isNotNull && explodedDataFrame("surfaceType").isNotNull)
         )
 
-    val bufferGeoms: (Geometry) => Geometry =
-      (geom: Geometry) => {
+    val bufferGeomsUDF =
+      udf((geom: Geometry) => {
         val latLngTransform = Transform(WebMercator, LatLng)
         val latLngGeom = Reproject(geom, latLngTransform)
-
-        //println(s"\nThis is the WebMercator centroid: ${geom.getCentroid().toText()}")
 
         val center = latLngGeom.getCentroid()
         val x = center.getX()
         val y = center.getY()
-
-        //println(s"This is the latLng centroid reprojected from the WebMercator Geometry: ${center.toText()}")
 
         val utmCRS = UTM.getZoneCrs(x, y)
         val utmTransform = Transform(LatLng, utmCRS)
 
         val utmGeom = Reproject(latLngGeom, utmTransform)
 
-        //println(s"This is the UTM centroid reprojected from the LatLng Geometry: ${utmGeom.getCentroid().toText()}")
-
         val bufferedUTMGeom = utmGeom.buffer(2.0)
 
         val backTransform = Transform(utmCRS, LatLng)
 
-        val result = Reproject(bufferedUTMGeom, backTransform)
-
-        //println(s"This is the UTM centroid being reprojected back to LatLng: ${result.getCentroid().toText()}\n")
-
-        result
-      }
-
-    val bufferGeomsUDF = udf(bufferGeoms)
+        Reproject(bufferedUTMGeom, backTransform)
+      })
 
     filteredDataFrame
       .withColumn("bufferedGeom", bufferGeomsUDF(filteredDataFrame.col("geom")))
