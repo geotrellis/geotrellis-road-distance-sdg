@@ -25,9 +25,10 @@ object GeomDataReader {
   def readAndFormat(
     sqlContext: SQLContext,
     targetPath: String,
-    countryCode: String,
-    transform: MapKeyTransform
+    countryCode: String
   ): DataFrame = {
+
+    val transform = MapKeyTransform(WebMercator, 4096, 4096)
 
     // This DataFrame contains the vector tile data
     val tileDataFrame: DataFrame =
@@ -67,7 +68,11 @@ object GeomDataReader {
 
     val produceData: (Array[Byte], Int, Int) => Array[(JTSGeometry, String, String, String)] =
       (bytes: Array[Byte], col: Int, row: Int) => {
-        val tileExtent: Extent = transform(col, row)
+
+        // The Y's stored in the mbtiles are reveresed, so we need to flip them
+        val flippedRow: Int = (1 << 12) - row - 1
+
+        val tileExtent: Extent = transform(col, flippedRow)
 
         val vectorTile = VectorTile.fromBytes(bytes, tileExtent)
 
