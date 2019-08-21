@@ -1,8 +1,6 @@
 package geotrellis.sdg
 
-import geotrellis.proj4._
 import geotrellis.spark.store.kryo._
-import geotrellis.layer._
 
 import org.locationtech.geomesa.spark.jts._
 
@@ -18,9 +16,9 @@ object ProduceRoadMask extends CommandApp(
   name = "Road Masking",
   header = "Poduces road geometries from OSM as an orc file",
   main = {
-    val mbtilesFile = Opts.option[String]("input", help = "The path to the orc file that should be read")
+    val mbtilesFile = Opts.option[String]("input", help = "The path to the mbtiles file that should be read")
     val country = Opts.option[String]("country", help = "The Alpha-3 code for a country from the ISO 3166 standard")
-    val outputPath = Opts.option[String]("output", help = "The path that the output should be written to")
+    val outputPath = Opts.option[String]("output", help = "The path that the resulting orc fil should be written to")
     val partitions = Opts.option[Int]("partitions", help = "The number of Spark partitions to use").withDefault(120)
 
     (mbtilesFile, country, outputPath, partitions).mapN { (targetFile, countryCode, output, partitionNum) =>
@@ -42,9 +40,7 @@ object ProduceRoadMask extends CommandApp(
       ss.withJTS
 
       try {
-        val transform = MapKeyTransform(WebMercator, 4096, 4096)
-
-        val osmRoads: DataFrame = GeomDataReader.readAndFormat(sqlContext, targetFile, countryCode, transform)
+        val osmRoads: DataFrame = GeomDataReader.readAndFormat(sqlContext, targetFile, countryCode)
 
         osmRoads.write.format("orc").save(output)
       } finally {
