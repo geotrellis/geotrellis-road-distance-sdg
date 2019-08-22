@@ -25,9 +25,12 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.jts.GeometryUDT
+import org.apache.spark.sql.functions.sum
 
 import cats.implicits._
 import com.monovore.decline._
+
+import scala.collection.mutable.ListBuffer
 
 
 object RoadSummary extends CommandApp(
@@ -113,7 +116,7 @@ object RoadSummary extends CommandApp(
         val md: TileLayerMetadata[SpatialKey] =
           countriesRDD.metadata
 
-        val transform = MapKeyTransform(md.crs, md.layout.layoutCols, md.layout.layoutRows)
+        val transform = md.mapTransform
 
         val clippedGeoms: RDD[(SpatialKey, Feature[Geometry, String])] =
           ClipToGrid(pavedRoadsRDD, md.layout)
@@ -132,30 +135,56 @@ object RoadSummary extends CommandApp(
           acc
         }
 
-        val countryRoadPopulations: RDD[(String, Double)] =
-          joinedRDD.flatMap { case (key, (tile, features)) =>
-            val tileExtent: Extent = transform(key)
-            val firstBand = tile.band(0)
+        val countryRoadPopulations: RDD[(SpatialKey, (String, Double))] =
+          joinedRDD.mapPartitions({ partition =>
+            partition.flatMap { case (key, (tile, features)) =>
+              val tileExtent: Extent = transform(key)
+              val firstBand = tile.band(0)
 
-            features.map { feat =>
-              val maskedTile = firstBand.mask(tileExtent, feat.geom, options)
-              val maskedPopulation = calculatePop(maskedTile)
+              features.map { feat =>
+                val maskedTile = firstBand.mask(tileExtent, feat.geom, options)
+                val maskedPopulation = calculatePop(maskedTile)
 
-              (feat.data, maskedPopulation)
+                (key, (feat.data, maskedPopulation))
+              }
+            }
+          }, preservesPartitioning = true)
+
+        val aggregatedCountryRoadPopulations: RDD[(SpatialKey, ListBuffer[(String, Double)])] = {
+          val emptyValue = ListBuffer.empty[(String, Double)]
+
+          val addValue = (list: ListBuffer[(String, Double)], elem: (String, Double)) =>
+            elem +=: list
+
+          val mergeCollection = (l1: ListBuffer[(String, Double)], l2: ListBuffer[(String, Double)]) =>
+            if (l1.size > l2.size) l1 ++: l2 else l2 ++: l1
+
+          countryRoadPopulations.aggregateByKey(emptyValue)(addValue, mergeCollection)
+        }
+
+        val reducedCountryRoadPopulations: RDD[(SpatialKey, Map[String, Double])] =
+          aggregatedCountryRoadPopulations.mapValues { listBuffer =>
+            val groupedValues: Map[String, List[(String, Double)]] =
+              listBuffer.toList.groupBy { _._1 }
+
+            groupedValues.map { case (countryName, groupedPops) =>
+              val reducedPops = groupedPops.map { _._2 }.reduce { _ + _ }
+
+              (countryName, reducedPops)
             }
           }
-
-        val reducedCountryRoadPopulations: RDD[(String, Double)] =
-          countryRoadPopulations.reduceByKey({ _ + _ }, partitionNum)
 
         val mappedTotalPopulations: Map[String, Double] =
           formatter.mappedPopulations(countriesRDD)
 
         val rowRDD: RDD[Row] =
-          reducedCountryRoadPopulations.map { case (code, roadPopulation) =>
-            val totalPopulation = mappedTotalPopulations.get(code).get
+          reducedCountryRoadPopulations.flatMap { case (_, mappedRoadPopulations) =>
+            mappedRoadPopulations.map { case (countryName, roadPopulation) =>
 
-            Row(CountryDirectory.codeToName(code), code, totalPopulation, roadPopulation)
+              val countryCode: String = CountryDirectory.nameToCode(countryName)
+              val totalPopulation: Double = mappedTotalPopulations.get(countryCode).get
+              Row(countryName, countryCode, totalPopulation, roadPopulation)
+            }
           }
 
         val outputSchema =
@@ -167,7 +196,15 @@ object RoadSummary extends CommandApp(
 
         val populationDataFrame: DataFrame = ss.createDataFrame(rowRDD, outputSchema)
 
-        populationDataFrame.write.json(output)
+        val reducedPopulationDataFrame: DataFrame =
+          populationDataFrame
+            .groupBy(
+              populationDataFrame.col("country_name"),
+              populationDataFrame.col("country_code"),
+              populationDataFrame.col("total_population")
+            ).agg(sum(populationDataFrame.col("road_population")).alias("road_population"))
+
+        reducedPopulationDataFrame.write.json(output)
 
       } finally {
         ss.sparkContext.stop

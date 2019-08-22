@@ -84,7 +84,7 @@ object MbTilesReader {
           val surfaceType =
             feat.data.get("surface") match {
               case Some(value) => value.asInstanceOf[VString].value
-              case None => null
+              case None => "null"
             }
 
           (feat.geom, featureType, roadType, surfaceType)
@@ -117,8 +117,7 @@ object MbTilesReader {
       explodedDataFrame
         .where(
           isValidUDF(explodedDataFrame("geom")) &&
-          explodedDataFrame("type") === "way" &&
-          (explodedDataFrame("roadType").isNotNull && explodedDataFrame("surfaceType").isNotNull)
+          explodedDataFrame("roadType").isNotNull
         )
 
     val bufferGeomsUDF =

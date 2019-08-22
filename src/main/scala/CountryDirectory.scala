@@ -6,7 +6,9 @@ object CountryDirectory {
     Array(
       ("oman", "omn"),
       ("djibouti", "dji"),
-      ("east-timor", "tls")
+      ("east-timor", "tls"),
+      ("luxembourg", "lux"),
+      ("belize", "blz")
     )
 
   def codeToName(code: String): String = {
