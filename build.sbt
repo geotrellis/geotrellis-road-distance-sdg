@@ -4,8 +4,9 @@ scalaVersion := "2.11.11"
 organization := "geotrellis"
 
 libraryDependencies ++= Seq(
-  "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.0.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-s3-spark" % "3.0.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-SNAPSHOT",
   "org.xerial" % "sqlite-jdbc" % "3.28.0",
   "com.azavea.geotrellis" % "geotrellis-contrib-vlm_2.11" % "3.17.1",
   //"com.azavea" %% "osmesa" % "0.3.0",

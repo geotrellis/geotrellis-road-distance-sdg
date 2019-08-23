@@ -62,18 +62,6 @@ object RoadSummary extends CommandApp(
       ss.withJTS
 
       try {
-        val inputSchema =
-          new StructType()
-            .add(StructField("zoom_level", IntegerType, nullable = false))
-            .add(StructField("tile_column", IntegerType, nullable = false))
-            .add(StructField("tile_row", IntegerType, nullable = false))
-            .add(StructField("geom", GeometryUDT, nullable = false))
-            .add(StructField("type", StringType, nullable = false))
-            .add(StructField("roadType", StringType, nullable = false))
-            .add(StructField("surfaceType", StringType, nullable = false))
-            .add(StructField("bufferedGeom", GeometryUDT, nullable = false))
-            .add(StructField("countryName", StringType, nullable = false))
-
         // OSM defines these surfaces as being paved.
         val pavedSurfaces: Array[String] =
           Array(
@@ -95,7 +83,7 @@ object RoadSummary extends CommandApp(
         val osmData: DataFrame =
           ss
             .read
-            .schema(inputSchema)
+            .schema(BufferedRoadsSchema())
             .orc(targetFile)
 
         val pavedRoads: DataFrame =
