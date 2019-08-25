@@ -12,16 +12,14 @@ import cats.implicits._
 import com.monovore.decline._
 
 
-object ProduceRoadMask extends CommandApp(
-  name = "Road Masking",
-  header = "Poduces road geometries from OSM as an orc file",
+object GlobalRoadMask extends CommandApp(
+  name = "Global Road Masking",
+  header = "Poduces road geometries from OSM data for the world as an orc file",
   main = {
-    val mbtilesFile = Opts.option[String]("mbtiles", help = "The path to the mbtiles file that should be read")
-    val country = Opts.option[String]("country", help = "The Alpha-3 code for a country from the ISO 3166 standard")
     val outputPath = Opts.option[String]("output", help = "The path that the resulting orc fil should be written to")
     val partitions = Opts.option[Int]("partitions", help = "The number of Spark partitions to use").withDefault(120)
 
-    (mbtilesFile, country, outputPath, partitions).mapN { (targetFile, countryCode, output, partitionNum) =>
+    (outputPath, partitions).mapN { (output, partitionNum) =>
       System.setSecurityManager(null)
 
       val conf =
@@ -39,11 +37,26 @@ object ProduceRoadMask extends CommandApp(
 
       ss.withJTS
 
-      try {
-        val osmRoads: DataFrame = MbTilesReader.readAndFormat(sqlContext, targetFile, countryCode).repartition(partitionNum)
+      val testCountries =
+        Array(
+          ("nicaragua", "nic"),
+          ("honduras", "hnd"),
+          ("el savador", "slv")
+        )
 
-        osmRoads
-          .repartition(partitionNum, osmRoads.col("tile_column"), osmRoads.col("tile_row"))
+      try {
+        val osmRoads: Array[DataFrame] =
+          testCountries.map { case (countryName, countryCode) =>
+
+            MbTilesDownloader.download(countryName)
+
+            MbTilesReader.readAndFormat(sqlContext, s"/tmp/${countryName}.mbtiles", countryCode)
+          }
+
+        val globalOSMRoads: DataFrame = osmRoads.reduce { _ union _ }
+
+        globalOSMRoads
+          .repartition(partitionNum, globalOSMRoads.col("tile_column"), globalOSMRoads.col("tile_row"))
           .write
           //.partitionBy(numPartitions, osmRoads.col("tile_column"), osmRoads.col("tile_row"))
           .format("orc")

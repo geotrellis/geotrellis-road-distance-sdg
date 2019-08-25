@@ -40,7 +40,7 @@ object MbTilesReader {
             "driver" -> "org.sqlite.JDBC",
             "dbtable" -> "tiles"
           )
-        ).load()
+        ).load().repartition(120)
 
     // The data is sotred as pbf files, which are gziped vectortiles.
     // So we need to decompress the bytes in order to read them in.
