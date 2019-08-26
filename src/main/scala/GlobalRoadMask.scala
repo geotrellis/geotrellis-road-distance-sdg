@@ -37,16 +37,9 @@ object GlobalRoadMask extends CommandApp(
 
       ss.withJTS
 
-      val testCountries =
-        Array(
-          ("nicaragua", "nic"),
-          ("honduras", "hnd"),
-          ("el savador", "slv")
-        )
-
       try {
         val osmRoads: Array[DataFrame] =
-          testCountries.map { case (countryName, countryCode) =>
+          CountryDirectory.countries.map { case (countryName, countryCode) =>
 
             MbTilesDownloader.download(countryName)
 

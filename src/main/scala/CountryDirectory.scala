@@ -4,11 +4,17 @@ package geotrellis.sdg
 object CountryDirectory {
   val countries: Array[(String, String)] =
     Array(
-      ("oman", "omn"),
-      ("djibouti", "dji"),
-      ("east-timor", "tls"),
-      ("luxembourg", "lux"),
-      ("belize", "blz")
+      //("oman", "omn"),
+      //("djibouti", "dji")
+      //("east-timor", "tls"),
+      //("luxembourg", "lux"),
+      ("belize", "blz"),
+      ("nicaragua", "nic"),
+      ("honduras", "hnd"),
+      ("el salvador", "slv"),
+      ("guatemala", "gtm"),
+      ("costa rica", "cri"),
+      ("panama", "pan")
     )
 
   def codeToName(code: String): String = {

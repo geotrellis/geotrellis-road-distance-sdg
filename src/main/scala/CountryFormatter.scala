@@ -20,7 +20,7 @@ case class CountryFormatter(sc: SparkContext, countryCodes: List[String]) {
     val rasterSourcesRDD: RDD[RasterSource] =
       sc.parallelize(rasterSources, rasterSources.size)
 
-    val summary = RasterSummary.fromRDD[RasterSource, Long](rasterSourcesRDD)
+    val summary = RasterSummary.fromRDD(rasterSourcesRDD)
     val layout = summary.layoutDefinition(FloatingLayoutScheme())
 
     RasterSourceRDD.tiledLayerRDD(rasterSourcesRDD, layout)(sc)

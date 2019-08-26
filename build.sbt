@@ -7,7 +7,7 @@ libraryDependencies ++= Seq(
   "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.0.0-SNAPSHOT",
   "org.xerial" % "sqlite-jdbc" % "3.28.0",
-  "com.azavea.geotrellis" % "geotrellis-contrib-vlm_2.11" % "3.17.0",
+  "com.azavea.geotrellis" % "geotrellis-contrib-vlm_2.11" % "3.17.1",
   //"com.azavea" %% "osmesa" % "0.3.0",
   //"com.azavea" %% "osmesa-common" % "0.3.0",
   "org.apache.spark" %% "spark-core" % "2.3.2",// % "provided",
@@ -48,11 +48,11 @@ assemblyMergeStrategy in assembly := {
   case _ => MergeStrategy.first
 }
 
-sparkInstanceCount          := 31
+sparkInstanceCount          := 5
 sparkMasterType             := "m4.2xlarge"
 sparkCoreType               := "m4.2xlarge"
-sparkMasterPrice            := Some(0.15)
-sparkCorePrice              := Some(0.15)
+sparkMasterPrice            := Some(0.12)
+sparkCorePrice              := Some(0.12)
 sparkEmrRelease             := "emr-5.19.0"
 sparkAwsRegion              := "us-east-1"
 sparkSubnetId               := Some("subnet-4f553375")
