@@ -23,10 +23,10 @@ import java.util.zip.GZIPInputStream
 
 object MbTilesReader {
   def readAndFormat(
-    sqlContext: SQLContext,
     targetPath: String,
-    countryCode: String
-  ): DataFrame = {
+    countryCode: String,
+    numPartitions: Int
+  )(implicit sqlContext: SQLContext): DataFrame = {
     val transform = MapKeyTransform(WebMercator, 4096, 4096)
 
     // This DataFrame contains the vector tile data
@@ -40,7 +40,7 @@ object MbTilesReader {
             "driver" -> "org.sqlite.JDBC",
             "dbtable" -> "tiles"
           )
-        ).load().repartition(120)
+        ).load().repartition(numPartitions)
 
     // The data is sotred as pbf files, which are gziped vectortiles.
     // So we need to decompress the bytes in order to read them in.

@@ -14,6 +14,7 @@ import org.apache.spark.sql.jts.GeometryUDT
 import java.io.PrintWriter
 
 
+/*
 object GeomTestingUtility {
   def main(args: Array[String]): Unit =
     dumpGeoms()
@@ -64,3 +65,4 @@ object GeomTestingUtility {
       }
   }
 }
+*/

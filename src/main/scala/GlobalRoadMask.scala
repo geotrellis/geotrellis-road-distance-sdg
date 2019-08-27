@@ -7,6 +7,7 @@ import org.locationtech.geomesa.spark.jts._
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql._
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import cats.implicits._
 import com.monovore.decline._
@@ -28,22 +29,33 @@ object GlobalRoadMask extends CommandApp(
           .setAppName("Road Mask")
           .set("spark.serializer", classOf[KryoSerializer].getName)
           .set("spark.kryo.registrator", classOf[KryoRegistrator].getName)
-          .set("spark.executor.memory", "8g")
-          .set("spark.driver.memory", "8g")
           .set("spark.default.parallelism", partitionNum.toString)
+          .set("spark.driver.memoryOverhead", "3G")
+          .set("spark.executor.memoryOverhead", "3G")
 
       implicit val ss = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
-      val sqlContext = ss.sqlContext
+      implicit val sqlContext = ss.sqlContext
 
       ss.withJTS
 
       try {
+        //val fs = FileSystem.get(ss.sparkContext.hadoopConfiguration)
+        CountryDirectory.countries.foreach { case (countryName, countryCode) =>
+          MbTilesDownloader.download(countryName)
+        }
+
         val osmRoads: Array[DataFrame] =
           CountryDirectory.countries.map { case (countryName, countryCode) =>
+            //MbTilesDownloader.download(countryName)
 
-            MbTilesDownloader.download(countryName)
+            val fileName: String = s"/tmp/${countryName}.mbtiles"
+            //val filePath = new Path(fileName)
 
-            MbTilesReader.readAndFormat(sqlContext, s"/tmp/${countryName}.mbtiles", countryCode)
+            val result: DataFrame = MbTilesReader.readAndFormat(fileName, countryCode, partitionNum)
+
+            //fs.delete(filePath)
+
+            result
           }
 
         val globalOSMRoads: DataFrame = osmRoads.reduce { _ union _ }
@@ -51,9 +63,9 @@ object GlobalRoadMask extends CommandApp(
         globalOSMRoads
           .repartition(partitionNum, globalOSMRoads.col("tile_column"), globalOSMRoads.col("tile_row"))
           .write
-          //.partitionBy(numPartitions, osmRoads.col("tile_column"), osmRoads.col("tile_row"))
           .format("orc")
           .save(output)
+
 
       } finally {
         ss.sparkContext.stop

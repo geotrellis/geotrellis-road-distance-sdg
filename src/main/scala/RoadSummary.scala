@@ -33,6 +33,7 @@ import com.monovore.decline._
 import scala.collection.mutable.ListBuffer
 
 
+/*
 object RoadSummary extends CommandApp(
   name = "Road Population Summary",
   header = "Poduces population summary json",
@@ -212,3 +213,4 @@ object RoadSummary extends CommandApp(
     }
   }
 )
+*/

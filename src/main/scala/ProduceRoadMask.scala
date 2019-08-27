@@ -12,6 +12,7 @@ import cats.implicits._
 import com.monovore.decline._
 
 
+/*
 object ProduceRoadMask extends CommandApp(
   name = "Road Masking",
   header = "Poduces road geometries from OSM as an orc file",
@@ -55,3 +56,4 @@ object ProduceRoadMask extends CommandApp(
     }
   }
 )
+*/

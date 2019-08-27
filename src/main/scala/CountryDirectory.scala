@@ -1,21 +1,24 @@
 package geotrellis.sdg
 
+import scalaj.http.Http
+
 
 object CountryDirectory {
-  val countries: Array[(String, String)] =
-    Array(
-      //("oman", "omn"),
-      //("djibouti", "dji")
-      //("east-timor", "tls"),
-      //("luxembourg", "lux"),
-      ("belize", "blz"),
-      ("nicaragua", "nic"),
-      ("honduras", "hnd"),
-      ("el salvador", "slv"),
-      ("guatemala", "gtm"),
-      ("costa rica", "cri"),
-      ("panama", "pan")
-    )
+  val countries: Array[(String, String)] = {
+    val request = Http("https://un-sdg.s3.amazonaws.com/countries.csv")
+    val lines = request.asString.body
+
+    // TODO: Come up with a better way of creating the array
+    lines
+      .split("\n")
+      .map { _.split(",").map { _.trim } }
+      .map { arr =>
+        val lowerCaseName = arr(0).toLowerCase.replaceAll(" ", "_")
+        val lowerCaseCode = arr(1).toLowerCase
+
+        (lowerCaseName, lowerCaseCode)
+      }
+  }
 
   def codeToName(code: String): String = {
     val lowerCaseCode: String = code.toLowerCase
@@ -34,8 +37,8 @@ object CountryDirectory {
   def nameToCode(name: String): String = {
     val lowerCaseName: String =
       // convert the name to lowercase, and replace
-    // any "_" or " " in the name with "-"
-      name.toLowerCase.replaceAll("(_| )", "-")
+      // any "-" or " " in the name with "_"
+      name.toLowerCase.replaceAll("(-| )", "_")
 
     val filteredCountries: Array[(String, String)] =
       countries.filter { case (name, _) =>
