@@ -32,6 +32,9 @@ object GlobalRoadMask extends CommandApp(
           .set("spark.default.parallelism", partitionNum.toString)
           .set("spark.driver.memoryOverhead", "3G")
           .set("spark.executor.memoryOverhead", "3G")
+          .set("spark.memory.storageFraction", "0.0")
+          .set("spark.driver.memory", "32G")
+          .set("spark.executor.memory", "32G")
 
       implicit val ss = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
       implicit val sqlContext = ss.sqlContext
@@ -45,6 +48,7 @@ object GlobalRoadMask extends CommandApp(
         }
 
         val osmRoads: Array[DataFrame] =
+          //CountryDirectory.countries.filter { case (name, _) => name != "japan" }.map { case (countryName, countryCode) =>
           CountryDirectory.countries.map { case (countryName, countryCode) =>
             //MbTilesDownloader.download(countryName)
 
@@ -65,7 +69,6 @@ object GlobalRoadMask extends CommandApp(
           .write
           .format("orc")
           .save(output)
-
 
       } finally {
         ss.sparkContext.stop

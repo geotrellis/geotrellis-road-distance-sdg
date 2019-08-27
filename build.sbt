@@ -10,8 +10,8 @@ libraryDependencies ++= Seq(
   "com.azavea.geotrellis" % "geotrellis-contrib-vlm_2.11" % "3.17.1",
   //"com.azavea" %% "osmesa" % "0.3.0",
   //"com.azavea" %% "osmesa-common" % "0.3.0",
-  "org.apache.spark" %% "spark-core" % "2.3.2" % "provided",
-  "org.apache.spark" %% "spark-hive" % "2.3.2" % "provided",
+  "org.apache.spark" %% "spark-core" % "2.3.2",// % "provided",
+  "org.apache.spark" %% "spark-hive" % "2.3.2", //% "provided",
   "com.monovore" %% "decline" % "0.5.0",
   "org.locationtech.geomesa" %% "geomesa-spark-jts" % "2.3.0",
   "org.locationtech.jts" % "jts-core" % "1.16.1",
@@ -76,6 +76,7 @@ sparkClusterName            := s"geotrellis-road-sdg-${Environment.user}"
 sparkEmrServiceRole         := "EMR_DefaultRole"
 sparkInstanceRole           := "EMR_EC2_DefaultRole"
 sparkEmrApplications        := Seq("Spark", "Zeppelin")
+sparkMasterEbsSize          := Some(256)
 sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value.withEc2KeyName("geotrellis-emr")
 
 import com.amazonaws.services.elasticmapreduce.model.Application
