@@ -1,6 +1,6 @@
 name := "geotrellis-road-distance-sdg"
 version := "0.1"
-scalaVersion := "2.11.11"
+scalaVersion := "2.11.12"
 organization := "geotrellis"
 
 libraryDependencies ++= Seq(
