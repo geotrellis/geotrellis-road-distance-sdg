@@ -1,5 +1,5 @@
 name := "geotrellis-road-distance-sdg"
-version := "0.1"
+version := "0.2"
 scalaVersion := "2.11.11"
 organization := "geotrellis"
 
@@ -10,9 +10,10 @@ libraryDependencies ++= Seq(
   "com.azavea.geotrellis" % "geotrellis-contrib-vlm_2.11" % "3.17.1",
   //"com.azavea" %% "osmesa" % "0.3.0",
   //"com.azavea" %% "osmesa-common" % "0.3.0",
-  "org.apache.spark" %% "spark-core" % "2.3.2",// % "provided",
-  "org.apache.spark" %% "spark-hive" % "2.3.2", //% "provided",
+  "org.apache.spark" %% "spark-core" % "2.4.1" % "provided",
+  "org.apache.spark" %% "spark-hive" % "2.4.1" % "provided",
   "com.monovore" %% "decline" % "0.5.0",
+  "org.tpolecat" %% "doobie-core" % "0.5.2",
   "org.locationtech.geomesa" %% "geomesa-spark-jts" % "2.3.0",
   "org.locationtech.jts" % "jts-core" % "1.16.1",
   "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.9.9"
@@ -66,9 +67,9 @@ assemblyMergeStrategy in assembly := {
 sparkInstanceCount          := 10
 sparkMasterType             := "m4.4xlarge"
 sparkCoreType               := "m4.4xlarge"
-sparkMasterPrice            := Some(0.504)
-sparkCorePrice              := Some(0.504)
-sparkEmrRelease             := "emr-5.19.0"
+sparkMasterPrice            := Some(1.00)
+sparkCorePrice              := Some(1.00)
+sparkEmrRelease             := "emr-5.24.1"
 sparkAwsRegion              := "us-east-1"
 sparkSubnetId               := Some("subnet-4f553375")
 sparkS3JarFolder            := s"s3://un-sdg/jars/${Environment.user}"
@@ -77,6 +78,7 @@ sparkEmrServiceRole         := "EMR_DefaultRole"
 sparkInstanceRole           := "EMR_EC2_DefaultRole"
 sparkEmrApplications        := Seq("Spark", "Zeppelin")
 sparkMasterEbsSize          := Some(256)
+sparkCoreEbsSize            := Some(256)
 sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value.withEc2KeyName("geotrellis-emr")
 
 import com.amazonaws.services.elasticmapreduce.model.Application
