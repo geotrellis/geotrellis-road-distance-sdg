@@ -1,13 +1,14 @@
 name := "geotrellis-road-distance-sdg"
 version := "0.2"
-scalaVersion := "2.11.11"
+scalaVersion := "2.11.12"
 organization := "geotrellis"
 
 libraryDependencies ++= Seq(
   "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.0.0-SNAPSHOT",
   "org.xerial" % "sqlite-jdbc" % "3.28.0",
-  "com.azavea.geotrellis" % "geotrellis-contrib-vlm_2.11" % "3.17.1",
+  "com.azavea.geotrellis" %% "geotrellis-contrib-vlm" % "3.17.1",
+  "com.azavea.geotrellis" %% "geotrellis-contrib-gdal" % "3.17.1",
   //"com.azavea" %% "osmesa" % "0.3.0",
   //"com.azavea" %% "osmesa-common" % "0.3.0",
   "org.apache.spark" %% "spark-core" % "2.4.1" % "provided",
