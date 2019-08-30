@@ -7,6 +7,7 @@ import geotrellis.vector.reproject._
 import geotrellis.vectortile._
 import geotrellis.layer._
 import geotrellis.spark.store.kryo._
+import geotrellis.qatiles.MbTiles
 
 import org.locationtech.geomesa.spark.jts._
 
@@ -46,7 +47,7 @@ object Work extends LazyLogging {
 
         MbTilesDownloader.download(name)
 
-        val mbtiles = new MbTiles(file.toString, targetLayout)
+        val mbtiles = new MbTiles(file, targetLayout)
         val vectorTiles: Seq[VectorTile] = mbtiles.all(12)
 
         vectorTiles.flatMap { vectorTile =>
