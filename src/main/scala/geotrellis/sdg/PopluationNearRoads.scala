@@ -57,6 +57,9 @@ object PopulationNearRoads extends CommandApp(
         .setAppName("PopulationNearRoads")
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .set("spark.kryo.registrator", "geotrellis.spark.store.kryo.KryoRegistrator")
+        .set("spark.speculation", "true")
+        .set("spark.speculation.interval", "4m")
+        .set("spark.task.cpus", "2")
         .set("spark.default.parallelism", partitionNum.getOrElse(120).toString)
         .set("spark.executor.extraJavaOptions", "-XX:+UseG1GC -XX:InitiatingHeapOccupancyPercent=35")
         .set("spark.network.timeout", "12000s")
@@ -71,24 +74,15 @@ object PopulationNearRoads extends CommandApp(
         val job =  new PopulationNearRoadsJob(filtered, partitionNum)
         job.result.foreach(println)
 
-        import _root_.io.circe._
-        import _root_.io.circe.generic.semiauto._
         import _root_.io.circe.syntax._
 
         val collection = JsonFeatureCollection()
         job.result.foreach { case (country, summary) =>
             val adminFeature = country.feature
             val f = Feature(adminFeature.geom, summary.toOutput(country).asJson)
-//              Map(
-//              "WB_A3" -> country.code,
-//              "NAME" -> country.name,
-//              "POP" -> summary.population.toString,
-//              "POP_ROAD" -> summary.populationNearRoads.toString,
-//              "PCT_SERVED" -> (summary.populationNearRoads / summary.population).toString
-//            ))
+
             collection.add(f)
         }
-
 
 //        val writer = new PrintWriter(new java.io.File(output))
 //        writer.print(collection.asJson)

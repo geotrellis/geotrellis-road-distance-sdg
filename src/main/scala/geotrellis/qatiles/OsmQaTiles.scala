@@ -52,6 +52,7 @@ class OsmQaTiles(
   val layout: LayoutDefinition = scheme.levelForZoom(12).layout
   val mbTiles: MbTiles = new MbTiles(localMbTile, scheme)
 
+  def fetchRow(key: SpatialKey) = mbTiles.fetch(12, key.col, key.row)
 
   def allKeys: Seq[SpatialKey] = mbTiles.allKeys(12)
 
