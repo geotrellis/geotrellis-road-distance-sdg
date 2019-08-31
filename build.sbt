@@ -1,5 +1,5 @@
 name := "geotrellis-road-distance-sdg"
-version := "0.11-eac"
+version := "0.12-eac"
 scalaVersion := "2.11.12"
 organization := "geotrellis"
 
@@ -75,6 +75,7 @@ sparkEmrRelease             := "emr-5.24.1"
 sparkAwsRegion              := "us-east-1"
 sparkSubnetId               := Some("subnet-4f553375")
 sparkS3JarFolder            := s"s3://un-sdg/jars/${Environment.user}"
+sparkS3LogUri               := Some(s"s3://un-sdg/logs/${Environment.user}/")
 sparkClusterName            := s"geotrellis-road-sdg-${Environment.user}"
 sparkEmrServiceRole         := "EMR_DefaultRole"
 sparkInstanceRole           := "EMR_EC2_DefaultRole"

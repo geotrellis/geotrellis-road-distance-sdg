@@ -86,27 +86,27 @@ object OsmQaTiles extends LazyLogging {
     }
   }
 
-  private val activeDownloads: TrieMap[Country, Future[OsmQaTiles]] = TrieMap.empty
+  private val activeDownloads: TrieMap[Country, OsmQaTiles] = TrieMap.empty
 
-  def fetchFor(country: Country): OsmQaTiles = {
-    val futureResult = activeDownloads.synchronized {
-      activeDownloads.getOrElseUpdate(country,
-        Future {
-          //val sourceUri = OsmQaTiles.uriFromCode(country.code)
-          val source = new Path(s"/${country.code}.mbtiles.gz") // default is HDFS root
-          val localMbTiles = new File(s"/tmp/qatiles/${country.code}.mbtiles")
+  def fetchFor(country: Country): OsmQaTiles = activeDownloads.synchronized {
+    activeDownloads.getOrElseUpdate(country, {
+      //val sourceUri = OsmQaTiles.uriFromCode(country.code)
+      val source = new Path(s"/${country.code}.mbtiles.gz") // default is HDFS root
+      val localMbTiles = new File(s"/tmp/qatiles/${country.code}.mbtiles")
 
-          if (!localMbTiles.exists) {
-            HdfsUtils.read(source, new Configuration()) { is =>
-              // HdfsUtils.read auto-detects and decompresses the GZip for us
-              FileUtils.copyInputStreamToFile(is, localMbTiles)
-            }
-          }
-
-          new OsmQaTiles(localMbTiles)
-        }(scala.concurrent.ExecutionContext.Implicits.global))
+      if (!localMbTiles.exists) {
+        logger.info(s"Copying: $source to $localMbTiles")
+        HdfsUtils.read(source, new Configuration()) { is =>
+          val bis = new BufferedInputStream(is)
+          // HdfsUtils.read auto-detects and decompresses the GZip for us
+          FileUtils.copyInputStreamToFile(bis, localMbTiles)
+        }
+        logger.info(s"Copying: $source to $localMbTiles (done)")
+      } else {
+        logger.info(s"Found: $localMbTiles")
       }
-    import scala.concurrent.duration._
-    Await.result(futureResult, 30.minutes)
+
+      new OsmQaTiles(localMbTiles)
+    })
   }
 }

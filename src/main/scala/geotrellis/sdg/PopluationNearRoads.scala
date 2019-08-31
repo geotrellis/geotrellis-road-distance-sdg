@@ -32,6 +32,7 @@ import scala.concurrent._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import _root_.io.circe.syntax._
 
 
 /**
@@ -43,10 +44,14 @@ object PopulationNearRoads extends CommandApp(
   main = {
     val countryCodesOpt = Opts.options[String]("country", short = "c", help = "Country code to use for input").
       withDefault(Country.allCountries.keys.toList.toNel.get)
+
+    val excludeCodesOpt = Opts.options[String]("exclude", short = "x", help = "Country code to eclude from input").
+      orEmpty
+
     val outputPath = Opts.option[String]("output", help = "The path that the resulting orc fil should be written to")
     val partitions = Opts.option[Int]("partitions", help = "The number of Spark partitions to use").orNone
 
-    (countryCodesOpt, outputPath, partitions).mapN { (countryCodes, output, partitionNum) =>
+    (countryCodesOpt,excludeCodesOpt, outputPath, partitions).mapN { (countryCodes, excludeCodes, output, partitionNum) =>
       val countries = countryCodes.map({ code => (code, Country.fromCode(code)) }).toList.toMap
       val badCodes = countries.filter({ case (_, v) => v.isEmpty }).keys
       require(badCodes.isEmpty, s"Bad country codes: ${badCodes}")
@@ -57,41 +62,42 @@ object PopulationNearRoads extends CommandApp(
         .setAppName("PopulationNearRoads")
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .set("spark.kryo.registrator", "geotrellis.spark.store.kryo.KryoRegistrator")
-        .set("spark.task.cpus", "2")
-        .set("spark.default.parallelism", partitionNum.getOrElse(120).toString)
+        .set("spark.task.cpus", "1")
+        .set("spark.default.parallelism", partitionNum.getOrElse(123).toString)
         .set("spark.executor.extraJavaOptions", "-XX:+UseG1GC -XX:InitiatingHeapOccupancyPercent=35")
         .set("spark.network.timeout", "12000s")
         .set("spark.executor.heartbeatInterval", "600s")
 
       implicit val spark = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
-      val missingCountries = List("USA", "CHN", "RUS", "KSV")
+      // USA, CHN, RUS, KSV is not present in the S3 bucket because of pre-processing error
+      val dropThese = List("USA", "CHN", "RUS", "KSV") ++ excludeCodes
+      val filtered = countries.values.flatten.toList.filterNot(c => dropThese.contains(c.code))
+
       try {
         spark.withJTS
-        // USA is not present in the S3 bucket because of pre-processing error
-        val filtered = countries.values.flatten.toList.filterNot(c => missingCountries.contains(c.code))
-        val job =  new PopulationNearRoadsJob(filtered, partitionNum)
-        job.result.foreach(println)
 
-        import _root_.io.circe.syntax._
+        val result =  PopulationNearRoadsJob(filtered, partitionNum)
+        result.foreach(println)
 
         val collection = JsonFeatureCollection()
-        job.result.foreach { case (country, summary) =>
+        result.foreach { case (country, summary) =>
             val adminFeature = country.feature
             val f = Feature(adminFeature.geom, summary.toOutput(country).asJson)
-
             collection.add(f)
         }
 
-//        val writer = new PrintWriter(new java.io.File(output))
-//        writer.print(collection.asJson)
-//        writer.close()
-
+        // Write the result, works with local and remote URIs
         val conf = spark.sparkContext.hadoopConfiguration
         val uri = new URI(output)
         val fs = FileSystem.get(uri, conf)
         val out = fs.create(new Path(output))
-        try { out.writeChars(collection.asJson.spaces2) }
-        finally { out.close() }
+        try {
+          out.writeChars(collection.asJson.spaces2)
+        }
+        finally {
+          out.close()
+          fs.close()
+        }
 
       } finally {
         spark.stop

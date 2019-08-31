@@ -9,16 +9,13 @@ import geotrellis.shapefile._
 
 import scala.collection.concurrent.TrieMap
 
-case class Country(
-  code: String
-) {
-  lazy val rasterSource: RasterSource = {
+case class Country(code: String) {
+  @transient lazy val rasterSource: RasterSource = {
     val url = s"s3://azavea-worldpop/Population/Global_2000_2020/MOSAIC_2019/ppp_prj_2019_${code.toUpperCase()}.tif"
     Country.rasterSourceCache.getOrElseUpdate(url, GeoTiffRasterSource(url))
   }
 
-
-  lazy val tileSource: LayoutTileSource[SpatialKey] =
+  @transient lazy val tileSource: LayoutTileSource[SpatialKey] =
     LayoutTileSource.spatial(rasterSource, LayoutDefinition(rasterSource.gridExtent, 256))
 
   def feature: MultiPolygonFeature[Map[String, Object]] = {
@@ -30,7 +27,7 @@ case class Country(
 }
 
 object Country {
-  val rasterSourceCache = TrieMap.empty[String, RasterSource]
+  @transient private lazy val rasterSourceCache = TrieMap.empty[String, RasterSource]
 
   val allCountries: Map[String, MultiPolygonFeature[Map[String,Object]]] = {
     // this list was hand-curated to match WorldPop country code to QA tiles download
