@@ -34,7 +34,7 @@ object Country {
     val availableCodes = CountryDirectory.countries.map(_._2)
     val url = getClass.getResource("/ne_50m_admin_0_countries.shp")
     ShapeFileReader.readMultiPolygonFeatures(url).map { feature =>
-      val isoCode = feature.data("ISO_A3").asInstanceOf[String]
+      val isoCode = feature.data("SU_A3").asInstanceOf[String]
       (isoCode, feature)
     }.
       filter(_._1 != "-99").
@@ -48,7 +48,7 @@ object Country {
 
   def fromCode(code: String): Option[Country] = {
     allCountries.get(code).map { country =>
-      val code = country.data("ISO_A3").asInstanceOf[String]
+      val code = country.data("SU_A3").asInstanceOf[String]
       Country(code.toUpperCase())
     }
   }
