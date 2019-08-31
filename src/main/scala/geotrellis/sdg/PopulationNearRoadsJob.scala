@@ -122,7 +122,7 @@ class PopulationNearRoadsJob(
           case (Some(raster), Some(roadMask)) =>
             (country, maskSummary(raster.tile.band(0), roadMask))
         }
-        logger.info(s"$summary")
+        logger.debug(s"$summary")
         summary
       }
 
