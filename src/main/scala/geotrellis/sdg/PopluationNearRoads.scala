@@ -33,6 +33,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import _root_.io.circe.syntax._
+import cats.data.Validated
 
 
 /**
@@ -42,19 +43,28 @@ object PopulationNearRoads extends CommandApp(
   name = "Population Near Roads",
   header = "Summarize population within and without 2km of OSM roads",
   main = {
-    val countryCodesOpt = Opts.options[String]("country", short = "c", help = "Country code to use for input").
-      withDefault(Country.allCountries.keys.toList.toNel.get)
+    val countryCodesOpt = Opts.options[String](long = "country", short = "c",
+      help = "Country code to use for input").
+      withDefault(Country.allCountries.keys.toList.toNel.get).
+      mapValidated({ codes =>
+        codes.filter{ c => Country.fromCode(c).isEmpty } match {
+          case Nil => Validated.valid(codes)
+          case badCodes => Validated.invalidNel(s"Invalid countries: ${badCodes}")
+        }
+      })
 
-    val excludeCodesOpt = Opts.options[String]("exclude", short = "x", help = "Country code to eclude from input").
+    val excludeCodesOpt = Opts.options[String](long = "exclude", short = "x",
+      help = "Country code to exclude from input").
       orEmpty
 
-    val outputPath = Opts.option[String]("output", help = "The path that the resulting orc fil should be written to")
-    val partitions = Opts.option[Int]("partitions", help = "The number of Spark partitions to use").orNone
+    val outputPath = Opts.option[String](long = "output",
+      help = "The path that the resulting orc fil should be written to")
+
+    val partitions = Opts.option[Int]("partitions",
+      help = "The number of Spark partitions to use").
+      orNone
 
     (countryCodesOpt,excludeCodesOpt, outputPath, partitions).mapN { (countryCodes, excludeCodes, output, partitionNum) =>
-      val countries = countryCodes.map({ code => (code, Country.fromCode(code)) }).toList.toMap
-      val badCodes = countries.filter({ case (_, v) => v.isEmpty }).keys
-      require(badCodes.isEmpty, s"Bad country codes: ${badCodes}")
 
       System.setSecurityManager(null)
       val conf = new SparkConf()
@@ -69,14 +79,11 @@ object PopulationNearRoads extends CommandApp(
         .set("spark.executor.heartbeatInterval", "600s")
 
       implicit val spark = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
-      // USA, CHN, RUS, KSV is not present in the S3 bucket because of pre-processing error
-      val dropThese = List("USA", "CHN", "RUS", "KSV") ++ excludeCodes
-      val filtered = countries.values.flatten.toList.filterNot(c => dropThese.contains(c.code))
 
       try {
         spark.withJTS
-
-        val result =  PopulationNearRoadsJob(filtered, partitionNum)
+        val countries = countryCodes.toList.diff(excludeCodes).map({ code => Country.fromCode(code).get })
+        val result =  PopulationNearRoadsJob(countries, partitionNum)
         result.foreach(println)
 
         val collection = JsonFeatureCollection()
@@ -91,11 +98,12 @@ object PopulationNearRoads extends CommandApp(
         val uri = new URI(output)
         val fs = FileSystem.get(uri, conf)
         val out = fs.create(new Path(output))
+        val pw = new PrintWriter(out)
         try {
-          out.writeChars(collection.asJson.spaces2)
+          pw.print(collection.asJson.spaces2)
         }
         finally {
-          out.close()
+          pw.close()
           fs.close()
         }
 
