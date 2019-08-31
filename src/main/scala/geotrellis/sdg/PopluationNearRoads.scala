@@ -3,42 +3,23 @@ package geotrellis.sdg
 import java.io.PrintWriter
 import java.net.URI
 
-import geotrellis.raster._
-import geotrellis.raster.summary.polygonal._
-import geotrellis.raster.summary.polygonal.visitors._
 import geotrellis.vector._
-import geotrellis.vector.io.wkt._
-import geotrellis.vectortile._
-import geotrellis.proj4._
-import geotrellis.layer._
-import geotrellis.contrib.vlm._
-import geotrellis.store.index.zcurve.Z2
 import org.locationtech.geomesa.spark.jts._
-import org.locationtech.jts.operation.union.UnaryUnionOp
-import org.locationtech.jts.geom.prep.{PreparedGeometry, PreparedGeometryFactory}
-import geotrellis.qatiles._
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import cats.implicits._
 import com.monovore.decline._
 import com.typesafe.scalalogging.LazyLogging
-import geotrellis.store.hadoop.util.HdfsUtils
 import geotrellis.vector.io.json.JsonFeatureCollection
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.geotools.feature.FeatureCollection
 
-import scala.concurrent._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.collection.JavaConverters._
-import scala.concurrent.duration._
 import _root_.io.circe.syntax._
 import cats.data.Validated
 
 
 /**
- * Summary of population within 2km of roads
- */
+  * Summary of population within 2km of roads
+  */
 object PopulationNearRoads extends CommandApp(
   name = "Population Near Roads",
   header = "Summarize population within and without 2km of OSM roads",
@@ -58,13 +39,19 @@ object PopulationNearRoads extends CommandApp(
       orEmpty
 
     val outputPath = Opts.option[String](long = "output",
-      help = "The path that the resulting orc fil should be written to")
+      help = "The path/uri of the summary JSON file")
 
     val partitions = Opts.option[Int]("partitions",
-      help = "The number of Spark partitions to use").
+      help = "spark.default.parallelism").
       orNone
 
-    (countryCodesOpt,excludeCodesOpt, outputPath, partitions).mapN { (countryCodes, excludeCodes, output, partitionNum) =>
+    // TODO: Add .mbtiles URI and RasterSource URI to countries.csv
+    // TODO: Add --playbook parameter that allows swapping countries.csv
+    // TODO: Re-use road masking code to render WorldPop
+    // TODO: Add option to save JSON without country borders
+
+    (countryCodesOpt,excludeCodesOpt, outputPath, partitions).mapN {
+      (countryCodes, excludeCodes, output, partitionNum) =>
 
       System.setSecurityManager(null)
       val conf = new SparkConf()
@@ -78,10 +65,10 @@ object PopulationNearRoads extends CommandApp(
         .set("spark.network.timeout", "12000s")
         .set("spark.executor.heartbeatInterval", "600s")
 
-      implicit val spark = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
+      implicit val spark: SparkSession =
+        SparkSession.builder.config(conf).enableHiveSupport.getOrCreate.withJTS
 
       try {
-        spark.withJTS
         val countries = countryCodes.toList.diff(excludeCodes).map({ code => Country.fromCode(code).get })
         val result =  PopulationNearRoadsJob(countries, partitionNum)
         result.foreach(println)
@@ -95,10 +82,8 @@ object PopulationNearRoads extends CommandApp(
 
         // Write the result, works with local and remote URIs
         val conf = spark.sparkContext.hadoopConfiguration
-        val uri = new URI(output)
-        val fs = FileSystem.get(uri, conf)
-        val out = fs.create(new Path(output))
-        val pw = new PrintWriter(out)
+        val fs = FileSystem.get(new URI(output), conf)
+        val pw = new PrintWriter(fs.create(new Path(output)))
         try {
           pw.print(collection.asJson.spaces2)
         }
