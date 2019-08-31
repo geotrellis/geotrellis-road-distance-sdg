@@ -48,7 +48,7 @@ object Work extends LazyLogging {
         MbTilesDownloader.download(name)
 
         val mbtiles = new MbTiles(file, targetLayout)
-        val vectorTiles: Seq[VectorTile] = mbtiles.all(12)
+        val vectorTiles: Seq[VectorTile] = mbtiles.allTiles(12).map(_.tile)
 
         vectorTiles.flatMap { vectorTile =>
           vectorTile.toIterable.toArray.map { feat =>

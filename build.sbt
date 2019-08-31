@@ -1,5 +1,5 @@
 name := "geotrellis-road-distance-sdg"
-version := "0.2"
+version := "0.7"
 scalaVersion := "2.11.12"
 organization := "geotrellis"
 
@@ -66,9 +66,9 @@ assemblyMergeStrategy in assembly := {
   case _ => MergeStrategy.first
 }
 
-sparkInstanceCount          := 10
-sparkMasterType             := "m4.4xlarge"
-sparkCoreType               := "m4.4xlarge"
+sparkInstanceCount          := 256
+sparkMasterType             := "m4.2xlarge"
+sparkCoreType               := "m4.2xlarge"
 sparkMasterPrice            := Some(1.00)
 sparkCorePrice              := Some(1.00)
 sparkEmrRelease             := "emr-5.24.1"
@@ -79,8 +79,8 @@ sparkClusterName            := s"geotrellis-road-sdg-${Environment.user}"
 sparkEmrServiceRole         := "EMR_DefaultRole"
 sparkInstanceRole           := "EMR_EC2_DefaultRole"
 sparkEmrApplications        := Seq("Spark", "Zeppelin")
-sparkMasterEbsSize          := Some(256)
-sparkCoreEbsSize            := Some(256)
+sparkMasterEbsSize          := Some(64)
+sparkCoreEbsSize            := Some(64)
 sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value.withEc2KeyName("geotrellis-emr")
 
 import com.amazonaws.services.elasticmapreduce.model.Application
@@ -93,18 +93,14 @@ sparkEmrConfigs := Seq(
   EmrConfig("spark").withProperties(
     "maximizeResourceAllocation" -> "true"),
   EmrConfig("spark-defaults").withProperties(
-  "spark.driver.memory" -> "15G",
-  "spark.executor.memory" -> "15G",
-  "spark.driver.memoryOverhead" -> "10G",
-  "spark.executor.memoryOverhead" -> "10G",
-  "spark.driver.maxResultSize" -> "10G",
-  "spark.executor.maxResultSize" -> "10G",
+  "spark.driver.maxResultSize" -> "2G",
+  "spark.executor.maxResultSize" -> "2G",
   "spark.dynamicAllocation.enabled" -> "true",
   "spark.shuffle.service.enabled" -> "true",
   "spark.shuffle.compress" -> "true",
   "spark.shuffle.spill.compress" -> "true",
   "spark.rdd.compress" -> "true",
-  "spark.executor.extraJavaOptions" -> "-XX:+UseParallelGC -Dgeotrellis.s3.threads.rdd.write=64"),
+  "spark.executor.extraJavaOptions" -> "-XX:+UseParallelGC"),
   EmrConfig("yarn-site").withProperties(
     "yarn.resourcemanager.am.max-attempts" -> "1",
     "yarn.nodemanager.vmem-check-enabled" -> "false",

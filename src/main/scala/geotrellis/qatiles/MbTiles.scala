@@ -22,11 +22,10 @@ import java.util.zip.GZIPInputStream
 import cats.effect.IO
 import doobie._
 import doobie.implicits._
-import geotrellis.layer.{TileBounds, ZoomedLayoutScheme}
+import geotrellis.layer.{SpatialKey, TileBounds, ZoomedLayoutScheme}
 import geotrellis.vectortile.VectorTile
 import java.io.File
 
-case class ResTile(zoom: Int, col: Int, row: Int, pbf: Array[Byte])
 
 class MbTiles(dbPath: File, scheme: ZoomedLayoutScheme) {
   val xa = Transactor.fromDriverManager[IO](
@@ -35,59 +34,81 @@ class MbTiles(dbPath: File, scheme: ZoomedLayoutScheme) {
     "", ""
   )
 
+  // https://github.com/mapbox/mbtiles-spec/blob/master/1.3/spec.md#content-1
+  private def flipRow(row: Int, zoom: Int): Int = (1<<zoom) - 1 - row
 
-  def fetch(zoom: Int, col: Int, row: Int): Option[VectorTile] = {
-    // https://github.com/mapbox/mbtiles-spec/blob/master/1.3/spec.md#content-1
-    val flipRow = (1<<zoom) - 1 - row
-    find(zoom, col, flipRow).transact(xa).unsafeRunSync.map { tile =>
-      val extent = scheme.levelForZoom(zoom).layout.mapTransform.keyToExtent(col, row)
-      val is = new ByteArrayInputStream(tile.pbf)
-      val gzip = new GZIPInputStream(is)
-      val bytes = sun.misc.IOUtils.readFully(gzip, -1, true)
-      VectorTile.fromBytes(bytes, extent)
-    }
+  def fetch(zoom: Int, col: Int, row: Int): Option[MbTiles.Row] = {
+    fetchQuery(zoom, col, flipRow(row, zoom)).transact(xa).unsafeRunSync.map(_.decode(scheme))
   }
 
-  def fetchBounds(zoom: Int, bounds: TileBounds): Seq[VectorTile] = {
-    findForBounds(zoom, bounds).transact(xa).unsafeRunSync.map { tile =>
-      val extent = scheme.levelForZoom(zoom).layout.mapTransform.keyToExtent(tile.col, tile.row)
-      val is = new ByteArrayInputStream(tile.pbf)
-      val gzip = new GZIPInputStream(is)
-      val bytes = sun.misc.IOUtils.readFully(gzip, -1, true)
-      VectorTile.fromBytes(bytes, extent)
-    }
+  private def fetchQuery(zoom: Int, col: Int, row: Int): ConnectionIO[Option[MbTiles.InternalRow]] =
+    sql"""
+    select zoom_level, tile_column, tile_row, tile_data
+    from tiles
+    where zoom_level=$zoom and tile_column=$col and tile_row=$row
+    """.query[MbTiles.InternalRow].option
+
+  def fetchBounds(zoom: Int, bounds: TileBounds): Seq[MbTiles.Row] =
+    fetchBoundsQuery(zoom, bounds).transact(xa).unsafeRunSync.map(_.decode(scheme))
+
+  private def fetchBoundsQuery(zoom: Int, bounds: TileBounds): ConnectionIO[List[MbTiles.InternalRow]] =
+    sql"""
+    select zoom_level, tile_column, tile_row, tile_data
+    from tiles
+    where zoom_level=$zoom
+    and tile_column >= ${bounds.colMin} and tile_column <= ${bounds.colMax}
+    and tile_row >= ${flipRow(bounds.rowMin, zoom)} and tile_row <= ${flipRow(bounds.rowMax, zoom)}
+    """.query[MbTiles.InternalRow].to[List]
+
+
+  def allTiles(zoom: Int): Seq[MbTiles.Row] =
+    allTilesQuery.transact(xa).unsafeRunSync.map(_.decode(scheme))
+
+  private def allTilesQuery: ConnectionIO[List[MbTiles.InternalRow]] =
+    sql"""
+    select zoom_level, tile_column, tile_row, tile_data
+    from tiles
+    """.query[MbTiles.InternalRow].to[List]
+
+
+  def allKeys(zoom: Int): Seq[SpatialKey] = {
+    allKeysQuery(zoom).transact(xa).unsafeRunSync().
+      map({ case SpatialKey(col, row) => SpatialKey(col, flipRow(row, zoom))})
   }
 
-  def all(zoom: Int): Seq[VectorTile] = {
-    findAll.transact(xa).unsafeRunSync.map { tile =>
-      val extent = scheme.levelForZoom(zoom).layout.mapTransform.keyToExtent(tile.col, tile.row)
-      val is = new ByteArrayInputStream(tile.pbf)
-      val gzip = new GZIPInputStream(is)
-      val bytes = sun.misc.IOUtils.readFully(gzip, -1, true)
-      VectorTile.fromBytes(bytes, extent)
-    }
+  private def allKeysQuery(zoom: Int): ConnectionIO[List[SpatialKey]] = {
+    sql"""
+    select tile_column, tile_row from tiles
+    where zoom_level=$zoom
+    """.query[SpatialKey].to[List]
   }
 
-  private def findForBounds(zoom: Int, bounds: TileBounds): ConnectionIO[List[ResTile]] =
+  private def findForBounds(zoom: Int, bounds: TileBounds): ConnectionIO[List[MbTiles.InternalRow]] =
     sql"""
     select zoom_level, tile_column, tile_row, tile_data
     from tiles
     where zoom_level=$zoom
     and tile_column >= ${bounds.colMin} and tile_column <= ${bounds.colMax}
     and tile_row >= ${bounds.rowMin} and tile_row <= ${bounds.rowMax}
-    """.query[ResTile].to[List]
+    """.query[MbTiles.InternalRow].to[List]
 
+}
 
-  private def find(zoom: Int, col: Int, row: Int): ConnectionIO[Option[ResTile]] =
-    sql"""
-    select zoom_level, tile_column, tile_row, tile_data
-    from tiles
-    where zoom_level=$zoom and tile_column=$col and tile_row=$row
-    """.query[ResTile].option
+object MbTiles {
+  case class Row(zoom: Int, key: SpatialKey, tile: VectorTile)
 
-  private def findAll: ConnectionIO[List[ResTile]] =
-    sql"""
-    select zoom_level, tile_column, tile_row, tile_data
-    from tiles
-    """.query[ResTile].to[List]
+  private case class InternalRow(zoom: Int, col: Int, row: Int, pbf: Array[Byte]){
+    def decode(scheme: ZoomedLayoutScheme): Row = {
+      val flipRow = (1<<zoom) - 1 - row
+      val extent = scheme.levelForZoom(zoom).layout.mapTransform.keyToExtent(col, flipRow)
+      val is = new ByteArrayInputStream(pbf)
+      val gzip = new GZIPInputStream(is)
+      val bytes = sun.misc.IOUtils.readFully(gzip, -1, true)
+      val tile = VectorTile.fromBytes(bytes, extent)
+      is.close()
+      gzip.close()
+
+      Row(zoom, SpatialKey(col, flipRow), tile)
+    }
+  }
 }

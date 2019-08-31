@@ -1,35 +1,31 @@
 package geotrellis.sdg
 
+import java.net.URI
+
+import geotrellis.qatiles.OsmQaTiles.BASE_URL
 import scalaj.http.Http
 
 
 object CountryDirectory {
   val countries: Array[(String, String)] = {
-    val request = Http("https://un-sdg.s3.amazonaws.com/countries.csv")
-    val lines = request.asString.body
+    val lines = Resource.lines("countries.csv")
 
-    // TODO: Come up with a better way of creating the array
     lines
-      .split("\n")
       .map { _.split(",").map { _.trim } }
       .map { arr =>
-        val lowerCaseName = arr(0).toLowerCase.replaceAll(" ", "_")
-        val lowerCaseCode = arr(1).toLowerCase
+        val name = arr(0).toLowerCase.replaceAll(" ", "_")
+        val code = arr(1).toUpperCase()
 
-        (lowerCaseName, lowerCaseCode)
-      }
+        (name, code)
+      }.toArray
   }
 
   def codeToName(code: String): String = {
-    val lowerCaseCode: String = code.toLowerCase
-
     val filteredCountries: Array[(String, String)] =
-      countries.filter { case (_, code) =>
-        code == lowerCaseCode
-      }
+      countries.filter { case (_, c) =>  c == code }
 
     if (filteredCountries.isEmpty)
-      throw new Error(s"Could not find name for country code: $lowerCaseCode")
+      throw new Error(s"Could not find name for country code: $code")
     else
       filteredCountries.head._1
   }
@@ -49,5 +45,17 @@ object CountryDirectory {
       throw new Error(s"Could not find country code for name: $lowerCaseName")
     else
       filteredCountries.head._2
+  }
+
+  def makeHdfsCpCommands: Seq[String] = {
+    //Some scripting to copy data in place
+    val BASE_URL: String = "s3://mapbox/osm-qa-tiles-production/latest.country/"
+
+    CountryDirectory.countries.map{ case (name, code) =>
+      val name = CountryDirectory.codeToName(code)
+      val source = s"${BASE_URL}${name.toLowerCase.replace(" ", "_")}.mbtiles.gz"
+      val target = s"/$code.mbtiles.gz"
+      s"hdfs dfs -cp $source $target"
+    }
   }
 }

@@ -17,7 +17,7 @@
 package geotrellis.qatiles
 
 import com.typesafe.scalalogging.LazyLogging
-import geotrellis.layer.{LayoutDefinition, ZoomedLayoutScheme}
+import geotrellis.layer.{LayoutDefinition, SpatialKey, ZoomedLayoutScheme}
 import geotrellis.vectortile.VectorTile
 import geotrellis.proj4._
 import geotrellis.vector._
@@ -29,7 +29,11 @@ import java.util.zip.GZIPInputStream
 
 import geotrellis.raster.RasterExtent
 import geotrellis.raster.reproject.ReprojectRasterExtent
+import geotrellis.store.hadoop.util.HdfsUtils
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.spark.SparkContext
 
 import scala.util.Try
 import scalaj.http._
@@ -48,8 +52,13 @@ class OsmQaTiles(
   val layout: LayoutDefinition = scheme.levelForZoom(12).layout
   val mbTiles: MbTiles = new MbTiles(localMbTile, scheme)
 
+
+  def allKeys: Seq[SpatialKey] = mbTiles.allKeys(12)
+
+  def allTiles: Seq[MbTiles.Row] = mbTiles.allTiles(12)
+
   /** Query for all tiles that intersect LatLng extent */
-  def queryForLatLngExtent(extent: Extent): Seq[VectorTile] = {
+  def queryForLatLngExtent(extent: Extent): Seq[MbTiles.Row] = {
     val wmExtent = ReprojectRasterExtent(RasterExtent(extent, 256, 256), LatLng, WebMercator).extent
     val tileBounds = layout.mapTransform.extentToBounds(wmExtent)
     mbTiles.fetchBounds(12, tileBounds)
@@ -59,8 +68,10 @@ class OsmQaTiles(
 object OsmQaTiles extends LazyLogging {
   final val BASE_URL: String = "https://s3.amazonaws.com/mapbox/osm-qa-tiles-production/latest.country/"
 
-  def uriFromName(countryName: String): URI =
-    new URI(s"${BASE_URL}${countryName.toLowerCase.replace(" ", "_")}.mbtiles.gz")
+  def uriFromCode(code: String): URI = {
+    val name = CountryDirectory.codeToName(code)
+    new URI(s"${BASE_URL}${name.toLowerCase.replace(" ", "_")}.mbtiles.gz")
+  }
 
   /** Downloads, throws  */
   private def download(source: URI, target: File): Unit = {
@@ -75,13 +86,25 @@ object OsmQaTiles extends LazyLogging {
   }
 
   private val activeDownloads: TrieMap[Country, Future[OsmQaTiles]] = TrieMap.empty
-  def fetchFor(country: Country): Future[OsmQaTiles] = activeDownloads.synchronized {
-    activeDownloads.getOrElseUpdate(country,
-      Future {
-        val sourceUri = OsmQaTiles.uriFromName(country.name)
-        val localMbTiles = new File(s"/tmp/qatiles/${country.code}.mbtiles")
-        if (!localMbTiles.exists) OsmQaTiles.download(sourceUri, localMbTiles)
-        new OsmQaTiles(localMbTiles)
-      }(scala.concurrent.ExecutionContext.Implicits.global))
+  def fetchFor(country: Country): OsmQaTiles = {
+    val futureResult = activeDownloads.synchronized {
+      activeDownloads.getOrElseUpdate(country,
+        Future {
+          //val sourceUri = OsmQaTiles.uriFromCode(country.code)
+          val source = new Path(s"/${country.code}.mbtiles.gz") // default is HDFS root
+          val localMbTiles = new File(s"/tmp/qatiles/${country.code}.mbtiles")
+
+          if (!localMbTiles.exists) {
+            HdfsUtils.read(source, new Configuration()) { is =>
+              // HdfsUtils.read auto-detects and decompresses the GZip for us
+              FileUtils.copyInputStreamToFile(is, localMbTiles)
+            }
+          }
+
+          new OsmQaTiles(localMbTiles)
+        }(scala.concurrent.ExecutionContext.Implicits.global))
+      }
+    import scala.concurrent.duration._
+    Await.result(futureResult, 30.minutes)
   }
 }
