@@ -5,7 +5,8 @@ import geotrellis.contrib.vlm.{LayoutTileSource, RasterRegion}
 import geotrellis.layer.{FloatingLayoutScheme, LayoutDefinition, SpatialKey}
 import geotrellis.proj4.{LatLng, WebMercator}
 import geotrellis.qatiles.OsmQaTiles
-import geotrellis.raster.isData
+import geotrellis.raster.rasterize.Rasterizer
+import geotrellis.raster._
 import geotrellis.raster.summary.polygonal.visitors.SumVisitor
 import geotrellis.raster.summary.polygonal._
 import geotrellis.raster.summary.polygonal.visitors._
@@ -20,7 +21,9 @@ import org.locationtech.jts.geom.prep.{PreparedGeometry, PreparedGeometryFactory
 import org.locationtech.jts.operation.union.{CascadedPolygonUnion, UnaryUnionOp}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.control.NonFatal
+import spire.syntax.cfor._
 
 
 /**
@@ -33,42 +36,28 @@ class PopulationNearRoadsJob(
   countries: List[Country],
   partitionNum: Option[Int]
 )(implicit spark: SparkSession) extends LazyLogging with Serializable {
+  import PopulationNearRoadsJob._
   // 1. Get a list of countries I'm going to use for input
   logger.info(s"INPUT: $countries - ${countries.length}" )
   logger.info(s"Partitions: ${partitionNum}")
   require(countries.nonEmpty, "Empty Input!")
   val countryRdd: RDD[Country] = spark.sparkContext.parallelize(countries, countries.length)
 
-  val bufferedRoadChunksRdd: RDD[((Country, SpatialKey), Geometry)] =
+  val partialRoadMaskRdd: RDD[((Country, SpatialKey), MutableArrayTile)] =
     countryRdd.flatMap({ country =>
       val qaTiles = OsmQaTiles.fetchFor(country)
       qaTiles.allTiles.flatMap { row =>
         val roads: Seq[MultiLineString] = GeometryUtils.extractAllRoads(row.tile)
         // we're going to do summary in LatLng, so lets record buffered in that
         val buffered = roads.map(GeometryUtils.bufferByMeters(_, WebMercator, LatLng, meters = 2000))
-        logger.debug(s"$country ${row.key} roads = ${roads.length}")
-
-        if (roads.isEmpty)
-          List.empty
-        else {
-          PopulationNearRoadsJob.unionAndKey(country, buffered)
-        }
+        burnRoadMask(country, buffered)
       }
     })
 
 
   // Each buffered road "overflowed", we need to join it back up, not going to trim it tough
-  val bufferedRoadsRdd: RDD[((Country, SpatialKey), Geometry)] =
-    bufferedRoadChunksRdd.groupByKey.mapValues({ geoms =>
-      try {
-        CascadedPolygonUnion.union(geoms.toSeq.asJava)
-      } catch {
-        case e: TopologyException =>
-          val area =
-          logger.error(s"TopologyException on union, keeping: ${geoms.head.toWKT}"  )
-          geoms.head
-      }
-    })
+  val roadMaskRdd: RDD[((Country, SpatialKey), MutableArrayTile)] =
+    partialRoadMaskRdd.reduceByKey(combineMasks)
 
 
   // We have RDD of countries and COG keys we will need to read.
@@ -100,7 +89,7 @@ class PopulationNearRoadsJob(
     })
 
   // We already read and simplified the geometries, HashPartitioner is great to read COGs
-  val joined = regionsRdd.leftOuterJoin(bufferedRoadsRdd).cache
+  val joined = regionsRdd.leftOuterJoin(roadMaskRdd).cache
   val partitionCount: Int = math.max(1, partitionNum.getOrElse((regionsRdd.count / 32).toInt))
   val repartitioned = joined.repartition(partitionCount)
 
@@ -118,23 +107,7 @@ class PopulationNearRoadsJob(
           country -> PopulationSummary(regionPop, 0, 1)
 
         case (Some(raster), Some(roadMask)) =>
-          var regionPop: Double = 0
-          raster.tile.band(0).foreachDouble(p => if (isData(p)) regionPop += p)
-          val res = raster.polygonalSummary(roadMask, SumVisitor)
-          res.toOption match {
-            case Some(sumValue) =>
-              if (sumValue(0).value.isNaN)
-                logger.warn(s"Counted in $country ${sumValue(0).value} people ${region.extent.toPolygon.toWKT}")
-              else
-                logger.info(s"Counted in $country ${sumValue(0).value} people")
-
-              country -> PopulationSummary(regionPop, sumValue(0).value, 1)
-
-            case None =>
-              // Probably edge effect, buffer past country boundary and NODATA area from square tile
-              logger.warn(s"No population for intersecting road mask, very odd")
-              country -> PopulationSummary(regionPop, 0, 1)
-          }
+          (country, maskSummary(raster.tile.band(0), roadMask))
       }
     }
 
@@ -163,4 +136,49 @@ object PopulationNearRoadsJob extends LazyLogging {
     }
   }.toSeq
 
+  def burnRoadMask(country: Country, geoms: Seq[Geometry]): Seq[((Country, SpatialKey), MutableArrayTile)] = {
+    val options = Rasterizer.Options(includePartial =  false, sampleType = PixelIsArea)
+    val masks = mutable.HashMap.empty[SpatialKey, MutableArrayTile]
+    val tileCols = country.tileSource.layout.tileCols
+    val tileRows = country.tileSource.layout.tileRows
+    for {
+      geom <- geoms
+      key <- country.tileSource.layout.mapTransform.keysForGeometry(geom)
+      extent = country.tileSource.layout.mapTransform.keyToExtent(key)
+      re = RasterExtent(extent, tileCols, tileRows)
+      mask = masks.getOrElseUpdate(key, ArrayTile.empty(BitCellType, tileCols, tileRows))
+    } Rasterizer.foreachCellByGeometry(geom, re, options) { (col, row) => mask.set(col, row, 1)}
+    masks.map({ case (key, mask) => ((country, key), mask)}).toList
+  }
+
+  /** Mutable, burn masks from right to left */
+  def combineMasks(left: MutableArrayTile, right: MutableArrayTile): MutableArrayTile = {
+    cfor(0)(_ < left.cols, _ + 1) { col =>
+      cfor(0)(_ < left.rows, _ + 1) { row =>
+        if (isNoData(left.get(col, row)))
+          left.set(col, row, right.get(col, row))
+      }
+    }
+    left
+  }
+
+  def maskSummary(pop: Tile, mask: Tile): PopulationSummary = {
+    require(pop.dimensions == mask.dimensions, s"pop: ${pop.dimensions} mask: ${mask.dimensions}")
+    var totalPop = 0.0
+    var roadPop = 0.0
+
+    cfor(0)(_ < pop.cols, _ + 1) { col =>
+      cfor(0)(_ < pop.rows, _ + 1) { row =>
+        val p = pop.getDouble(col, row)
+
+        if (isData(p)) {
+          totalPop += p
+          val m = mask.get(col, row)
+          if (isData(m)) roadPop +=p
+        }
+      }
+    }
+
+    PopulationSummary(totalPop, roadPop, 1)
+  }
 }

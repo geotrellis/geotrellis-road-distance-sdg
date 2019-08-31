@@ -52,11 +52,11 @@ class OsmQaTiles(
   val layout: LayoutDefinition = scheme.levelForZoom(12).layout
   val mbTiles: MbTiles = new MbTiles(localMbTile, scheme)
 
-  def fetchRow(key: SpatialKey) = mbTiles.fetch(12, key.col, key.row)
+  def fetchRow(key: SpatialKey): Option[MbTiles.Row] = mbTiles.fetch(12, key.col, key.row)
 
-  def allKeys: Seq[SpatialKey] = mbTiles.allKeys(12)
+  def allKeys: Iterator[SpatialKey] = mbTiles.allKeys(12)
 
-  def allTiles: Seq[MbTiles.Row] = mbTiles.allTiles(12)
+  def allTiles: Iterator[MbTiles.Row] = mbTiles.allTiles(12)
 
   /** Query for all tiles that intersect LatLng extent */
   def queryForLatLngExtent(extent: Extent): Seq[MbTiles.Row] = {
@@ -87,6 +87,7 @@ object OsmQaTiles extends LazyLogging {
   }
 
   private val activeDownloads: TrieMap[Country, Future[OsmQaTiles]] = TrieMap.empty
+
   def fetchFor(country: Country): OsmQaTiles = {
     val futureResult = activeDownloads.synchronized {
       activeDownloads.getOrElseUpdate(country,

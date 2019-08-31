@@ -1,5 +1,5 @@
 name := "geotrellis-road-distance-sdg"
-version := "0.7"
+version := "0.11-eac"
 scalaVersion := "2.11.12"
 organization := "geotrellis"
 
@@ -66,9 +66,9 @@ assemblyMergeStrategy in assembly := {
   case _ => MergeStrategy.first
 }
 
-sparkInstanceCount          := 256
-sparkMasterType             := "m4.2xlarge"
-sparkCoreType               := "m4.2xlarge"
+sparkInstanceCount          := 128
+sparkMasterType             := "m4.4xlarge"
+sparkCoreType               := "m4.4xlarge"
 sparkMasterPrice            := Some(1.00)
 sparkCorePrice              := Some(1.00)
 sparkEmrRelease             := "emr-5.24.1"

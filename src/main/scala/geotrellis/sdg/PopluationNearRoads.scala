@@ -57,8 +57,6 @@ object PopulationNearRoads extends CommandApp(
         .setAppName("PopulationNearRoads")
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .set("spark.kryo.registrator", "geotrellis.spark.store.kryo.KryoRegistrator")
-        .set("spark.speculation", "true")
-        .set("spark.speculation.interval", "4m")
         .set("spark.task.cpus", "2")
         .set("spark.default.parallelism", partitionNum.getOrElse(120).toString)
         .set("spark.executor.extraJavaOptions", "-XX:+UseG1GC -XX:InitiatingHeapOccupancyPercent=35")

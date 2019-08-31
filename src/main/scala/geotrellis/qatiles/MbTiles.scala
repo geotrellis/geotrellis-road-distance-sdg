@@ -61,26 +61,26 @@ class MbTiles(dbPath: File, scheme: ZoomedLayoutScheme) {
     """.query[MbTiles.InternalRow].to[List]
 
 
-  def allTiles(zoom: Int): Seq[MbTiles.Row] =
+  def allTiles(zoom: Int): Iterator[MbTiles.Row] =
     allTilesQuery.transact(xa).unsafeRunSync.map(_.decode(scheme))
 
-  private def allTilesQuery: ConnectionIO[List[MbTiles.InternalRow]] =
+  private def allTilesQuery: ConnectionIO[Iterator[MbTiles.InternalRow]] =
     sql"""
     select zoom_level, tile_column, tile_row, tile_data
     from tiles
-    """.query[MbTiles.InternalRow].to[List]
+    """.query[MbTiles.InternalRow].to[Iterator]
 
 
-  def allKeys(zoom: Int): Seq[SpatialKey] = {
+  def allKeys(zoom: Int): Iterator[SpatialKey] = {
     allKeysQuery(zoom).transact(xa).unsafeRunSync().
       map({ case SpatialKey(col, row) => SpatialKey(col, flipRow(row, zoom))})
   }
 
-  private def allKeysQuery(zoom: Int): ConnectionIO[List[SpatialKey]] = {
+  private def allKeysQuery(zoom: Int): ConnectionIO[Iterator[SpatialKey]] = {
     sql"""
     select tile_column, tile_row from tiles
     where zoom_level=$zoom
-    """.query[SpatialKey].to[List]
+    """.query[SpatialKey].to[Iterator]
   }
 
   private def findForBounds(zoom: Int, bounds: TileBounds): ConnectionIO[List[MbTiles.InternalRow]] =

@@ -10,3 +10,4 @@ derby.log
 metastore_db/
 *.log
 .idea
+.clust_id
