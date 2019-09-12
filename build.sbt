@@ -1,23 +1,32 @@
 name := "geotrellis-road-distance-sdg"
-version := "0.1"
-scalaVersion := "2.11.11"
+version := "0.12-eac"
+scalaVersion := "2.11.12"
 organization := "geotrellis"
 
 libraryDependencies ++= Seq(
-  //"org.locationtech.geotrellis" %% "geotrellis-shapefile" % "2.0.0",
-  "com.azavea" %% "osmesa" % "0.3.0",
-  "com.azavea" %% "osmesa-common" % "0.3.0",
-  "org.apache.spark" %% "spark-core" % "2.3.2" % "provided",
-  "org.apache.spark" %% "spark-hive" % "2.3.2" % "provided"//,
-  //"org.apache.spark" %% "spark-sql" % "2.3.2",// % "provided"//,
-  //"com.monovore" %% "decline" % "0.5.0"
+  "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.0.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-shapefile" % "3.0.0-SNAPSHOT",
+  "org.xerial" % "sqlite-jdbc" % "3.28.0",
+  "com.azavea.geotrellis" %% "geotrellis-contrib-vlm" % "3.17.1",
+  "com.azavea.geotrellis" %% "geotrellis-contrib-gdal" % "3.17.1",
+  //"com.azavea" %% "osmesa" % "0.3.0",
+  //"com.azavea" %% "osmesa-common" % "0.3.0",
+  "org.apache.spark" %% "spark-core" % "2.4.1" % "provided",
+  "org.apache.spark" %% "spark-hive" % "2.4.1" % "provided",
+  "com.monovore" %% "decline" % "0.5.0",
+  "org.tpolecat" %% "doobie-core" % "0.5.2",
+  "org.locationtech.geomesa" %% "geomesa-spark-jts" % "2.3.0",
+  "org.locationtech.jts" % "jts-core" % "1.16.1",
+  "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.9.9"
 )
 
 externalResolvers := Seq(
   DefaultMavenRepository,
   "locationtech-releases" at "https://repo.locationtech.org/content/repositories/releases/",
   "locationtech-snapshots" at "https://repo.locationtech.org/content/repositories/snapshots/",
-  Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+  Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns),
+  Resolver.bintrayRepo("azavea", "geotrellis")
 )
 
 test in assembly := {}
@@ -34,27 +43,45 @@ assemblyShadeRules in assembly := {
 }
 
 assemblyMergeStrategy in assembly := {
-  case s if s.startsWith("META-INF/services") => MergeStrategy.concat
-  case "reference.conf" | "application.conf"  => MergeStrategy.concat
-  case "META-INF/MANIFEST.MF" | "META-INF\\MANIFEST.MF" => MergeStrategy.discard
-  case "META-INF/ECLIPSE.RSA" | "META-INF/ECLIPSE.SF" => MergeStrategy.discard
-  case "META-INF/ECLIPSE_.RSA" | "META-INF/ECLIPSE_.SF" => MergeStrategy.discard
+  case "reference.conf" => MergeStrategy.concat
+  case "application.conf" => MergeStrategy.concat
+  case PathList("META-INF", xs@_*) =>
+    xs match {
+      case ("MANIFEST.MF" :: Nil) => MergeStrategy.discard
+      // Concatenate everything in the services directory to keep GeoTools happy.
+      case ("services" :: _ :: Nil) =>
+        MergeStrategy.concat
+      // Concatenate these to keep JAI happy.
+      case ("javax.media.jai.registryFile.jai" :: Nil) | ("registryFile.jai" :: Nil) | ("registryFile.jaiext" :: Nil) =>
+        MergeStrategy.concat
+      case (name :: Nil) => {
+        // Must exclude META-INF/*.([RD]SA|SF) to avoid "Invalid signature file digest for Manifest main attributes" exception.
+        if (name.endsWith(".RSA") || name.endsWith(".DSA") || name.endsWith(".SF"))
+          MergeStrategy.discard
+        else
+          MergeStrategy.first
+      }
+      case _ => MergeStrategy.first
+    }
   case _ => MergeStrategy.first
 }
 
-sparkInstanceCount          := 31
-sparkMasterType             := "m4.2xlarge"
-sparkCoreType               := "m4.2xlarge"
-sparkMasterPrice            := Some(0.15)
-sparkCorePrice              := Some(0.15)
-sparkEmrRelease             := "emr-5.19.0"
+sparkInstanceCount          := 64
+sparkMasterType             := "m4.4xlarge"
+sparkCoreType               := "m4.4xlarge"
+sparkMasterPrice            := Some(1.00)
+sparkCorePrice              := Some(1.00)
+sparkEmrRelease             := "emr-5.24.1"
 sparkAwsRegion              := "us-east-1"
 sparkSubnetId               := Some("subnet-4f553375")
 sparkS3JarFolder            := s"s3://un-sdg/jars/${Environment.user}"
+sparkS3LogUri               := Some(s"s3://un-sdg/logs/${Environment.user}/")
 sparkClusterName            := s"geotrellis-road-sdg-${Environment.user}"
 sparkEmrServiceRole         := "EMR_DefaultRole"
 sparkInstanceRole           := "EMR_EC2_DefaultRole"
 sparkEmrApplications        := Seq("Spark", "Zeppelin")
+sparkMasterEbsSize          := Some(64)
+sparkCoreEbsSize            := Some(64)
 sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value.withEc2KeyName("geotrellis-emr")
 
 import com.amazonaws.services.elasticmapreduce.model.Application
@@ -67,19 +94,14 @@ sparkEmrConfigs := Seq(
   EmrConfig("spark").withProperties(
     "maximizeResourceAllocation" -> "true"),
   EmrConfig("spark-defaults").withProperties(
-  "spark.driver.memory" -> "4G",
-  "spark.executor.memory" -> "4G",
-  "spark.driver.maxResultSize" -> "8G",
-  "spark.executor.maxResultSize" -> "5G",
+  "spark.driver.maxResultSize" -> "2G",
+  "spark.executor.maxResultSize" -> "2G",
   "spark.dynamicAllocation.enabled" -> "true",
   "spark.shuffle.service.enabled" -> "true",
   "spark.shuffle.compress" -> "true",
   "spark.shuffle.spill.compress" -> "true",
   "spark.rdd.compress" -> "true",
-  "spark.default.parallelism" -> "15000",
-  //"spark.yarn.am.memory" -> "4g",
-  //"spark.yarn.am.memoryOverhead" -> "4g",
-  "spark.executor.extraJavaOptions" -> "-XX:+UseParallelGC -Dgeotrellis.s3.threads.rdd.write=64"),
+  "spark.executor.extraJavaOptions" -> "-XX:+UseParallelGC"),
   EmrConfig("yarn-site").withProperties(
     "yarn.resourcemanager.am.max-attempts" -> "1",
     "yarn.nodemanager.vmem-check-enabled" -> "false",

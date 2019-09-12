@@ -1,5 +1,6 @@
 package geotrellis.sdg
 
+/*
 import java.io.FileNotFoundException
 import java.net.URL
 import java.security.InvalidParameterException
@@ -86,3 +87,4 @@ object GeoJsonReader extends LazyLogging {
     }
   }
 }
+*/
