@@ -1,23 +1,19 @@
 package geotrellis.sdg
 
+import java.net.URI
+
 import com.typesafe.scalalogging.LazyLogging
-import geotrellis.contrib.vlm.spark.SpatialPartitioner
-import geotrellis.contrib.vlm.{LayoutTileSource, RasterRegion}
-import geotrellis.layer.{FloatingLayoutScheme, LayoutDefinition, SpatialKey}
-import geotrellis.proj4.{LatLng, WebMercator}
-import geotrellis.qatiles.OsmQaTiles
+import geotrellis.layer._
+import geotrellis.proj4._
+import geotrellis.qatiles.{OsmQaTiles, RoadTags}
 import geotrellis.raster.rasterize.Rasterizer
 import geotrellis.raster._
-import geotrellis.raster.summary.polygonal.visitors.SumVisitor
-import geotrellis.raster.summary.polygonal._
-import geotrellis.raster.summary.polygonal.visitors._
 import geotrellis.vector._
 import geotrellis.vectortile.VectorTile
 import org.apache.spark.{HashPartitioner, RangePartitioner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.locationtech.jts.geom.TopologyException
-import org.locationtech.jts.geom.prep.{PreparedGeometry, PreparedGeometryFactory}
 import org.locationtech.jts.operation.union.{CascadedPolygonUnion, UnaryUnionOp}
 
 import scala.collection.JavaConverters._
@@ -36,6 +32,7 @@ import scala.concurrent.{Await, Future}
   */
 class PopulationNearRoadsJob(
   country: Country,
+  grump: Grump,
   partitionNum: Option[Int]
 )(implicit spark: SparkSession) extends LazyLogging with Serializable {
   import PopulationNearRoadsJob._
@@ -84,13 +81,12 @@ class PopulationNearRoadsJob(
     allKeysRdd.partitionBy(partitioner).flatMap { case (key, _) =>
       val qaTiles = OsmQaTiles.fetchFor(country)
       val row = qaTiles.fetchRow(key).get
-      val roads: Seq[MultiLineString] = GeometryUtils.extractAllRoads(row.tile)
+      val roads: Seq[MultiLineString] = extractRoads(row.tile)(t => t.isPossiblyMotorRoad && t.isStrictlyAllWeather)
       // we're going to do summary in LatLng, so lets record buffered in that
       val buffered = roads.map(GeometryUtils.bufferByMeters(_, WebMercator, LatLng, meters = 2000))
       burnRoadMask(country, buffered)
     }
   }
-
 
   // Each buffered road "overflowed", we need to join it back up, not going to trim it tough
   val roadMaskRdd: RDD[(SpatialKey, MutableArrayTile)] =
@@ -100,30 +96,33 @@ class PopulationNearRoadsJob(
   // However, there could be pop regions NOT covered by COGs that we still need to read
   // So we should consider all regions available form WorldPop and join them to vectors
 
+  val grumpMaskRdd: RDD[(SpatialKey, Tile)] =
+    grump.queryAsMaskRdd(country.feature.geom, country.tileSource.layout, partitioner)
+
   // Now just iterate over the pairs and count up per region summary
   val popSummary: RDD[(Country, PopulationSummary)] =
     regionsRdd.
-      leftOuterJoin(roadMaskRdd, partitioner).
-      map { case (_, (key, maybeRoadMask)) =>
+      cogroup(roadMaskRdd, grumpMaskRdd, partitioner).
+      map { case (key, (_, roadMasks, grumpMasks)) =>
         // !!! This part is CRITICAL !!!
         // We moved the key and not the RasterRegion because each regions will spawn a new RasterSource
         // This would result in new S3Client and Metadata fetch for EVERY segment read.
-        val region = country.tileSource.rasterRegionForKey(key).get
+        // So we generate RasterRegion from key inside the map step
 
-        val summary = (region.raster, maybeRoadMask) match {
-          case (None, _) =>
-            country -> PopulationSummary(0, 0, 0)
+        val summary =
+          country.tileSource.rasterRegionForKey(key).map(_.raster.get.tile.band(0)) match {
+            case Some(popTile) =>
+              roadSummaryByMask(
+                popTile,
+                roadMasks.headOption.getOrElse(BitConstantTile(0, popTile.cols, popTile.rows)),
+                grumpMasks.headOption.getOrElse(BitConstantTile(0, popTile.cols, popTile.rows)))
 
-          case (Some(raster), None) =>
-            var regionPop: Double = 0
-            raster.tile.band(0).foreachDouble(p => if (isData(p)) regionPop += p)
-            country -> PopulationSummary(regionPop, 0, 1)
+            case None =>
+              PopulationSummary.empty
+          }
 
-          case (Some(raster), Some(roadMask)) =>
-            (country, maskSummary(raster.tile.band(0), roadMask))
-        }
         logger.debug(s"$summary")
-        summary
+        (country, summary)
       }
 
   val result: RDD[(Country, PopulationSummary)] =
@@ -134,6 +133,7 @@ object PopulationNearRoadsJob extends LazyLogging {
 
   def apply(
     countries: List[Country],
+    grump: Grump,
     partitionNum: Option[Int]
   )(implicit spark: SparkSession): Map[Country, PopulationSummary] = {
     import scala.concurrent.ExecutionContext.Implicits.global
@@ -144,7 +144,7 @@ object PopulationNearRoadsJob extends LazyLogging {
 
     val results = Future.traverse(countries){ country => Future {
       spark.sparkContext.setJobGroup(country.code, country.name)
-      val job = new PopulationNearRoadsJob(country, partitionNum)
+      val job = new PopulationNearRoadsJob(country, grump, partitionNum)
       val result = job.result.collect
       spark.sparkContext.clearJobGroup()
       logger.info(s"Result: $result")
@@ -202,21 +202,39 @@ object PopulationNearRoadsJob extends LazyLogging {
     left
   }
 
-  def maskSummary(pop: Tile, mask: Tile): PopulationSummary = {
-    require(pop.dimensions == mask.dimensions, s"pop: ${pop.dimensions} mask: ${mask.dimensions}")
-    var totalPop = 0.0
-    var roadPop = 0.0
+  def roadSummaryByMask(pop: Tile, roadMask: Tile, grumpMask: Tile): PopulationSummary = {
+    require(pop.dimensions == roadMask.dimensions,
+      s"pop: ${pop.dimensions} road mask: ${roadMask.dimensions}")
+    require(pop.dimensions == grumpMask.dimensions,
+      s"pop: ${pop.dimensions} grump mask: ${grumpMask.dimensions}")
 
-    cfor(0)(_ < pop.cols, _ + 1) { col =>
-      cfor(0)(_ < pop.rows, _ + 1) { row =>
-        val p = pop.getDouble(col, row)
-        if (isData(p)) {
-          totalPop += p
-          if (mask.get(col, row) == 1) roadPop +=p
-        }
-      }
-    }
 
-    PopulationSummary(totalPop, roadPop, 1)
+    PopulationSummary(
+      total = cellSum(pop),
+      urban = cellSum(pop * grumpMask),
+      rural = cellSum(pop * grumpMask.localNot),
+      served = cellSum(pop * (grumpMask.localNot.localAnd(roadMask))))
+  }
+
+  def cellSum(tile: Tile): Double = {
+    var ret: Double = Double.NaN
+    tile.foreachDouble({ x =>
+      require(isNoData(x) || x >= 0, s"pop = $x")
+      if (isData(ret) && isData(x)) ret += x else if (isNoData(ret)) ret = x
+    })
+    ret
+  }
+
+  /** Returns all OSM road ways that match the filter function.
+   * @param tile MapBox OSM VectorTile, assumed to have "osm" layer
+   * @param filter filter function on highway tag and surface tag
+   */
+  def extractRoads(tile: VectorTile)(filter: RoadTags => Boolean): Seq[MultiLineString] = {
+    tile.layers("osm").lines.
+      filter(f => filter(RoadTags(f.data))).
+      map(f => MultiLineString(f.geom)) ++
+    tile.layers("osm").multiLines.
+      filter(f => filter(RoadTags(f.data))).
+      map(_.geom)
   }
 }

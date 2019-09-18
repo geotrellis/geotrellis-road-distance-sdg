@@ -70,13 +70,16 @@ object PopulationNearRoads extends CommandApp(
 
       try {
         val countries = countryCodes.toList.diff(excludeCodes).map({ code => Country.fromCode(code).get })
-        val result =  PopulationNearRoadsJob(countries, partitionNum)
+        val grumpUri = new URI("file:/Users/eugene/Downloads/grump-v1-urban-ext-polygons-rev01-shp/global_urban_extent_polygons_v1.01.shp")
+        val grump = new Grump(grumpUri)
+
+        val result =  PopulationNearRoadsJob(countries, grump, partitionNum)
         result.foreach(println)
 
         val collection = JsonFeatureCollection()
         result.foreach { case (country, summary) =>
             val adminFeature = country.feature
-            val f = Feature(adminFeature.geom, summary.toOutput(country).asJson)
+            val f = Feature(adminFeature.geom, OutputProperties(country, summary).asJson)
             collection.add(f)
         }
 

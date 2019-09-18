@@ -3,11 +3,8 @@ package geotrellis.sdg
 import geotrellis.layer._
 import geotrellis.raster._
 import geotrellis.raster.summary.polygonal.visitors.SumVisitor
-import geotrellis.spark.MultibandTileLayerRDD
+import geotrellis.spark.{MultibandTileLayerRDD, RasterSourceRDD, RasterSummary}
 import geotrellis.spark.summary.polygonal._
-import geotrellis.contrib.vlm._
-import geotrellis.contrib.vlm.spark._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 

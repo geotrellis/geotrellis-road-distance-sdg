@@ -11,8 +11,6 @@ import geotrellis.spark.store.kryo._
 import geotrellis.spark.clip._
 import geotrellis.layer._
 
-import geotrellis.contrib.vlm.spark.SpatialPartitioner
-
 import org.locationtech.geomesa.spark.jts._
 
 import org.locationtech.jts.geom.{Geometry => JTSGeometry}

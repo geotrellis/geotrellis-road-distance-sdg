@@ -1,9 +1,8 @@
 package geotrellis.sdg
 
-import geotrellis.contrib.vlm.gdal._
-import geotrellis.contrib.vlm._
-import geotrellis.contrib.vlm.geotiff.GeoTiffRasterSource
-import geotrellis.layer.{LayoutDefinition, SpatialKey}
+import geotrellis.layer.{LayoutDefinition, LayoutTileSource, SpatialKey}
+import geotrellis.raster.RasterSource
+import geotrellis.raster.geotiff.GeoTiffRasterSource
 import geotrellis.vector._
 import geotrellis.shapefile._
 

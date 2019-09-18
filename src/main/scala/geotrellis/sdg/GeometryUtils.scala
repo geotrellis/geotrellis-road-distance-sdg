@@ -1,26 +1,10 @@
 package geotrellis.sdg
 
 import geotrellis.vector._
-import geotrellis.vectortile._
 import geotrellis.proj4._
 import geotrellis.proj4.util._
 
 object GeometryUtils {
-  final val notRoads = List("path", "steps", "bridleway", "footway")
-  private def onlyHighways(feature: MVTFeature[Geometry]): Boolean = {
-    feature.data.get("highway") match {
-      case Some(v) => ! notRoads.contains(v)
-      case None => false
-    }
-  }
-
-  def extractAllRoads(tile: VectorTile ): Seq[MultiLineString] = {
-    val mlines = tile.layers("osm").multiLines
-    val lines = tile.layers("osm").lines
-    // TODO: this is not all, I'm sure
-    lines.filter(onlyHighways).map(f => MultiLineString(f.geom))++ mlines.filter(onlyHighways).map(_.geom)
-  }
-
   /** Buffer geometry by meters by intermediate reprojection to the closest UTM zone */
   def bufferByMeters(geom: Geometry, sourceCrs: CRS, targetCrs: CRS, meters: Double): Geometry = {
     val utmZoneCrs = {
