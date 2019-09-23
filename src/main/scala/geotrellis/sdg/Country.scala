@@ -14,9 +14,6 @@ case class Country(code: String) {
     Country.rasterSourceCache.getOrElseUpdate(url, GeoTiffRasterSource(url))
   }
 
-  @transient lazy val tileSource: LayoutTileSource[SpatialKey] =
-    LayoutTileSource.spatial(rasterSource, LayoutDefinition(rasterSource.gridExtent, 256))
-
   def feature: MultiPolygonFeature[Map[String, Object]] = {
     // Assume only fromString constructor has been used, so this is "safe"
     Country.allCountries(code)
@@ -28,9 +25,22 @@ case class Country(code: String) {
 object Country {
   @transient private lazy val rasterSourceCache = TrieMap.empty[String, RasterSource]
 
+  val countries: Array[(String, String)] = {
+    val lines = Resource.lines("countries.csv")
+    lines
+      .map { _.split(",").map { _.trim } }
+      .map { arr =>
+        val name = arr(0).toLowerCase.replaceAll(" ", "_")
+        val code = arr(1).toUpperCase()
+
+        (name, code)
+      }.toArray
+  }
+
   val allCountries: Map[String, MultiPolygonFeature[Map[String,Object]]] = {
     // this list was hand-curated to match WorldPop country code to QA tiles download
-    val availableCodes = CountryDirectory.countries.map(_._2)
+
+    val availableCodes = countries.map(_._2)
     val url = getClass.getResource("/ne_50m_admin_0_countries.shp")
     ShapeFileReader.readMultiPolygonFeatures(url).map { feature =>
       val isoCode = feature.data("SU_A3").asInstanceOf[String]
@@ -50,5 +60,15 @@ object Country {
       val code = country.data("SU_A3").asInstanceOf[String]
       Country(code.toUpperCase())
     }
+  }
+
+  def codeToName(code: String): String = {
+    val filteredCountries: Array[(String, String)] =
+      countries.filter { case (_, c) =>  c == code }
+
+    if (filteredCountries.isEmpty)
+      throw new Error(s"Could not find name for country code: $code")
+    else
+      filteredCountries.head._1
   }
 }

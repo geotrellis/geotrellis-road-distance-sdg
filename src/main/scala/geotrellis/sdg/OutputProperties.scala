@@ -23,7 +23,7 @@ object OutputProperties {
       pop = summary.total,
       pop_urban = summary.urban,
       pop_rural = summary.rural,
-      pop_served = summary.served,
-      pct_served = (summary.served / summary.rural)
+      pop_served = summary.ruralServed,
+      pct_served = (summary.ruralServed / summary.rural)
     )
 }

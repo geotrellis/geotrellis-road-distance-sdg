@@ -11,3 +11,4 @@ metastore_db/
 *.log
 .idea
 .clust_id
+.DS_Store
