@@ -1,4 +1,4 @@
-package geotrellis.sdg
+package geotrellis.sdg2
 
 import geotrellis.proj4._
 import geotrellis.proj4.util._
@@ -45,7 +45,7 @@ object Work extends LazyLogging {
 
         logger.info(s"\n\nDownloading this country: $name\n")
 
-        MbTilesDownloader.download(name)
+        //MbTilesDownloader.download(name)
 
         val mbtiles = new MbTiles(file, targetLayout)
         val vectorTiles: Iterator[VectorTile] = mbtiles.allTiles(12).map(_.tile)

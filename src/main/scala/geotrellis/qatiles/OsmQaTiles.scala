@@ -70,7 +70,7 @@ object OsmQaTiles extends LazyLogging {
   final val BASE_URL: String = "https://s3.amazonaws.com/mapbox/osm-qa-tiles-production/latest.country/"
 
   def uriFromCode(code: String): URI = {
-    val name = CountryDirectory.codeToName(code)
+    val name = Country.codeToName(code)
     new URI(s"${BASE_URL}${name.toLowerCase.replace(" ", "_")}.mbtiles.gz")
   }
 

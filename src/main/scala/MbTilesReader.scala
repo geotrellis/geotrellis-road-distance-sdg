@@ -1,4 +1,4 @@
-package geotrellis.sdg
+package geotrellis.sdg2
 
 import geotrellis.proj4._
 import geotrellis.proj4.util._
@@ -6,19 +6,16 @@ import geotrellis.vector.{Extent, Geometry}
 import geotrellis.vector.reproject._
 import geotrellis.vectortile._
 import geotrellis.layer._
-
 import org.locationtech.geomesa.spark.jts._
-
 import org.locationtech.jts.geom.{Geometry => JTSGeometry}
-
 import org.apache.commons.io.IOUtils
-
-import org.apache.spark.sql.{SQLContext, DataFrame}
-import org.apache.spark.sql.functions.{udf, explode, lit}
-
+import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.functions.{explode, lit, udf}
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.net.URI
 import java.util.zip.GZIPInputStream
+
+import geotrellis.sdg.Country
 
 
 object MbTilesReader {
@@ -143,6 +140,6 @@ object MbTilesReader {
 
     filteredDataFrame
       .withColumn("bufferedGeom", bufferGeomsUDF(filteredDataFrame.col("geom")))
-      .withColumn("countryName", lit(CountryDirectory.codeToName(countryCode)))
+      .withColumn("countryName", lit(Country.codeToName(countryCode)))
   }
 }

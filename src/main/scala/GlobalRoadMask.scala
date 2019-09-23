@@ -1,4 +1,4 @@
-package geotrellis.sdg
+package geotrellis.sdg2
 
 import geotrellis.proj4._
 import geotrellis.proj4.util._
@@ -7,28 +7,23 @@ import geotrellis.vector.reproject._
 import geotrellis.vectortile._
 import geotrellis.layer._
 import geotrellis.spark.store.kryo._
-
 import org.locationtech.geomesa.spark.jts._
-
 import org.locationtech.jts.geom.{Geometry => JTSGeometry}
-
 import org.apache.spark.SparkConf
 import org.apache.spark.storage._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.functions.{udf, explode, lit}
+import org.apache.spark.sql.functions.{explode, lit, udf}
 import org.apache.spark.sql.jts.GeometryUDT
-
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import com.typesafe.scalalogging.LazyLogging
-
 import cats.implicits._
 import com.monovore.decline._
-
 import java.io.File
+
+import geotrellis.sdg.Country
 
 
 object GlobalRoadMask extends CommandApp(
@@ -62,7 +57,7 @@ object GlobalRoadMask extends CommandApp(
       ss.withJTS
 
       try {
-        val noUS = CountryDirectory.countries.filter { case (_, code) => code != "usa" }
+        val noUS = Country.countries.filter { case (_, code) => code != "usa" }
         val groupedCountries: Iterator[Array[(String, String)]] = noUS.grouped(5)
 
         val dataFrames =
