@@ -19,6 +19,8 @@ import geotrellis.proj4.LatLng
 import org.apache.spark.storage.StorageLevel
 
 import scala.concurrent.{Await, Future}
+import cats.implicits._
+import cats.syntax.list._
 
 
 /**
@@ -28,17 +30,11 @@ object PopulationNearRoads extends CommandApp(
   name = "Population Near Roads",
   header = "Summarize population within and without 2km of OSM roads",
   main = {
-    val countryCodesOpt = Opts.options[String](long = "country", short = "c",
+    val countryOpt = Opts.options[Country](long = "country", short = "c",
       help = "Country code to use for input").
-      withDefault(Country.allCountries.keys.toList.toNel.get).
-      mapValidated({ codes =>
-        codes.filter{ c => Country.fromCode(c).isEmpty } match {
-          case Nil => Validated.valid(codes)
-          case badCodes => Validated.invalidNel(s"Invalid countries: ${badCodes}")
-        }
-      })
+      withDefault(Country.all)
 
-    val excludeCodesOpt = Opts.options[String](long = "exclude", short = "x",
+    val excludeOpt = Opts.options[Country](long = "exclude", short = "x",
       help = "Country code to exclude from input").
       orEmpty
 
@@ -54,8 +50,8 @@ object PopulationNearRoads extends CommandApp(
     // TODO: Re-use road masking code to render WorldPop
     // TODO: Add option to save JSON without country borders
 
-    (countryCodesOpt,excludeCodesOpt, outputPath, partitions).mapN {
-      (countryCodes, excludeCodes, output, partitionNum) =>
+    (countryOpt, excludeOpt, outputPath, partitions).mapN {
+      (countriesInclude, excludeCountries, output, partitionNum) =>
 
       System.setSecurityManager(null)
       val conf = new SparkConf()
@@ -73,10 +69,9 @@ object PopulationNearRoads extends CommandApp(
         SparkSession.builder.config(conf).enableHiveSupport.getOrCreate.withJTS
 
       try {
-        val countries = countryCodes.toList.diff(excludeCodes).map({ code => Country.fromCode(code).get })
+        val countries = countriesInclude.toList.diff(excludeCountries)
         //val grumpUri = new URI("file:/Users/eugene/Downloads/grump-v1-urban-ext-polygons-rev01-shp/global_urban_extent_polygons_v1.01.shp")
         val grumpUri = new URI("https://un-sdg.s3.amazonaws.com/data/grump-v1.01/global_urban_extent_polygons_v1.01.shp")
-
 
         import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -116,8 +111,7 @@ object PopulationNearRoads extends CommandApp(
 
         val collection = JsonFeatureCollection()
         result.foreach { case (country, summary) =>
-            val adminFeature = country.feature
-            val f = Feature(adminFeature.geom, OutputProperties(country, summary).asJson)
+            val f = Feature(country.boundary, OutputProperties(country, summary).asJson)
             collection.add(f)
         }
 

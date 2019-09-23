@@ -47,7 +47,7 @@ class PopulationNearRoadsJob(
 
   val grump = Grump(grumpUri, layoutTileSource.source.crs)
 
-  val wsCountryBorder: MultiPolygon = country.feature.geom.reproject(LatLng, layoutTileSource.source.crs)
+  val wsCountryBorder: MultiPolygon = country.boundary.reproject(LatLng, layoutTileSource.source.crs)
   val countryRdd: RDD[Country] = spark.sparkContext.parallelize(Array(country), 1)
 
   // Generate per-country COG regions we will need to read.
@@ -91,8 +91,6 @@ class PopulationNearRoadsJob(
   val grumpMaskRdd: RDD[(SpatialKey, Tile)] =
     grump.queryAsMaskRdd(wsCountryBorder, layout, partitioner).
       setName(s"${country.code} GRUMP Mask")
-
-  spark.sparkContext.register(new HistogramAccumulator, "histogram")
 
   val popRegions: RDD[(SpatialKey, SummaryRegion)] =
     regionsRdd.

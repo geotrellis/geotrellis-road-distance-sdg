@@ -1,206 +1,205 @@
-Afghanistan,AFG
-Albania,ALB
-Algeria,DZA
-Andorra,AND
-Angola,AGO
-Antigua and Barbuda,ATG
-Argentina,ARG
-Armenia,ARM
-Australia,AUS
-Austria,AUT
-Azerbaijan,AZE
-The Bahamas,BHS
-Bahrain,BHR
-Bangladesh,BGD
-Barbados,BRB
-Belarus,BLR
-Belgium,BEL
-Belize,BLZ
-Benin,BEN
-Bermuda,BMU
-Bhutan,BTN
-Bolivia,BOL
-Bosnia and Herzegovina,BIH
-Botswana,BWA
-Brazil,BRA
-Brunei,BRN
-Bulgaria,BGR
-Burkina Faso,BFA
-Burundi,BDI
-Cambodia,KHM
-Cameroon,CMR
-Canada,CAN
-Cape Verde,CPV
-Central African Republic,CAF
-Chad,TCD
-Chile,CHL
-China,CHN
-Colombia,COL
-Comoros,COM
-Democratic Republic of the Congo,COD
-Republic Of Congo,COG
-Costa Rica,CRI
-Ivory Coast,CIV
-Croatia,HRV
-Cuba,CUB
-Cyprus,CYP
-Czech Republic,CZE
-Denmark,DNK
-Djibouti,DJI
-Dominica,DMA
-Dominican Republic,DOM
-Ecuador,ECU
-Egypt,EGY
-El Salvador,SLV
-Equatorial Guinea,GNQ
-Eritrea,ERI
-Estonia,EST
-Ethiopia,ETH
-Fiji,FJI
-Finland,FIN
-France,FRA
-Gabon,GAB
-Gambia,GMB
-Georgia,GEO
-Germany,DEU
-Ghana,GHA
-Greece,GRC
-Greenland,GRL
-Grenada,GRD
-Guam,GUM
-Guatemala,GTM
-Guinea,GIN
-Guinea Bissau,GNB
-Guyana,GUY
-Haiti,HTI
-Honduras,HND
-Hungary,HUN
-Iceland,ISL
-India,IND
-Indonesia,IDN
-Iran,IRN
-Iraq,IRQ
-Ireland,IRL
-Israel,ISR
-Italy,ITA
-Jamaica,JAM
-Japan,JPN
-Jersey,JEY
-Jordan,JOR
-Kazakhstan,KAZ
-Kenya,KEN
-Kosovo,KOS
-Kiribati,KIR
-North Korea,PRK
-South Korea,KOR
-Kuwait,KWT
-Kyrgyzstan,KGZ
-Laos,LAO
-Latvia,LVA
-Lebanon,LBN
-Lesotho,LSO
-Liberia,LBR
-Libya,LBY
-Liechtenstein,LIE
-Lithuania,LTU
-Luxembourg,LUX
-Macedonia,MKD
-Madagascar,MDG
-Malawi,MWI
-Malaysia,MYS
-Maldives,MDV
-Mali,MLI
-Malta,MLT
-Mauritania,MRT
-Mauritius,MUS
-Mexico,MEX
-Federated States of Micronesia,FSM
-Moldova,MDA
-Monaco,MCO
-Mongolia,MNG
-Montenegro,MNE
-Morocco,MAR
-Mozambique,MOZ
-Myanmar,MMR
-Namibia,NAM
-Nauru,NRU
-Nepal,NPL
-Netherlands,NLD
-New Zealand,NZL
-Nicaragua,NIC
-Niger,NER
-Nigeria,NGA
-Niue,NIU
-Northern Mariana Islands,MNP
-Norway,NOR
-Oman,OMN
-Pakistan,PAK
-Palau,PLW
-Palestine,PSE
-Panama,PAN
-Papua New Guinea,PNG
-Paraguay,PRY
-Peru,PER
-Philippines,PHL
-Poland,POL
-Portugal,PRT
-Puerto Rico,PRI
-Qatar,QAT
-Romania,ROU
-Rwanda,RWA
-Russia,RUS
-Saint Helena,SHN
-Saint Kitts and Nevis,KNA
-Saint Lucia,LCA
-Saint Vincent and the Grenadines,VCT
-Samoa,WSM
-San Marino,SMR
-Sao Tome and Principe,STP
-Saudi Arabia,SAU
-Senegal,SEN
-Republic of Serbia,SRB
-Seychelles,SYC
-Sierra Leone,SLE
-Singapore,SGP
-Slovakia,SVK
-Slovenia,SVN
-Solomon Islands,SLB
-Somalia,SOM
-Somaliland,SOL
-South Africa,ZAF
-South Sudan,SSD
-Spain,ESP
-Sri Lanka,LKA
-Sudan,SDN
-Suriname,SUR
-Swaziland,SWZ
-Sweden,SWE
-Switzerland,CHE
-Syria,SYR
-Taiwan,TWN
-Tajikistan,TJK
-United Republic of Tanzania,TZA
-Thailand,THA
-East Timor,TLS
-Togo,TGO
-Tonga,TON
-Trinidad and Tobago,TTO
-Tunisia,TUN
-Turkey,TUR
-Turkmenistan,TKM
-Turks and Caicos Islands,TCA
-Tuvalu,TUV
-Uganda,UGA
-Ukraine,UKR
-United Arab Emirates,ARE
-United Kingdom,GBR
-United States Of America,USA
-Uruguay,URY
-Uzbekistan,UZB
-Vanuatu,VUT
-Venezuela,VEN
-Vietnam,VNM
-Western Sahara,ESH
-Yemen,YEM
-Zambia,ZMB
-Zimbabwe,ZWE
+Afghanistan,AFG,SU_A3
+Albania,ALB,SU_A3
+Algeria,DZA,SU_A3
+Andorra,AND,SU_A3
+Angola,AGO,SU_A3
+Antigua and Barbuda,ATG,SU_A3
+Argentina,ARG,SU_A3
+Armenia,ARM,SU_A3
+Australia,AUS,SU_A3
+Austria,AUT,SU_A3
+Azerbaijan,AZE,SU_A3
+The Bahamas,BHS,SU_A3
+Bahrain,BHR,SU_A3
+Bangladesh,BGD,SU_A3
+Barbados,BRB,SU_A3
+Belarus,BLR,SU_A3
+Belgium,BEL,SU_A3
+Belize,BLZ,SU_A3
+Benin,BEN,SU_A3
+Bermuda,BMU,SU_A3
+Bhutan,BTN,SU_A3
+Bolivia,BOL,SU_A3
+Bosnia and Herzegovina,BIH,SU_A3
+Botswana,BWA,SU_A3
+Brazil,BRA,SU_A3
+Brunei,BRN,SU_A3
+Bulgaria,BGR,SU_A3
+Burkina Faso,BFA,SU_A3
+Burundi,BDI,SU_A3
+Cambodia,KHM,SU_A3
+Cameroon,CMR,SU_A3
+Canada,CAN,SU_A3
+Cape Verde,CPV,SU_A3
+Central African Republic,CAF,SU_A3
+Chad,TCD,SU_A3
+Chile,CHL,SU_A3
+China,CHN,SU_A3
+Colombia,COL,SU_A3
+Comoros,COM,SU_A3
+Democratic Republic of the Congo,COD,SU_A3
+Republic Of Congo,COG,SU_A3
+Costa Rica,CRI,SU_A3
+Ivory Coast,CIV,SU_A3
+Croatia,HRV,SU_A3
+Cuba,CUB,SU_A3
+Cyprus,CYP,SU_A3
+Czech Republic,CZE,SU_A3
+Denmark,DNK,SU_A3
+Djibouti,DJI,SU_A3
+Dominica,DMA,SU_A3
+Dominican Republic,DOM,SU_A3
+Ecuador,ECU,SU_A3
+Egypt,EGY,SU_A3
+El Salvador,SLV,SU_A3
+Equatorial Guinea,GNQ,SU_A3
+Eritrea,ERI,SU_A3
+Estonia,EST,SU_A3
+Ethiopia,ETH,SU_A3
+Fiji,FJI,SU_A3
+Finland,FIN,SU_A3
+France,FRA,SU_A3
+Gabon,GAB,SU_A3
+Gambia,GMB,SU_A3
+Georgia,GEO,SU_A3
+Germany,DEU,SU_A3
+Ghana,GHA,SU_A3
+Greece,GRC,SU_A3
+Greenland,GRL,SU_A3
+Grenada,GRD,SU_A3
+Guam,GUM,SU_A3
+Guatemala,GTM,SU_A3
+Guinea,GIN,SU_A3
+Guinea Bissau,GNB,SU_A3
+Guyana,GUY,SU_A3
+Haiti,HTI,SU_A3
+Honduras,HND,SU_A3
+Hungary,HUN,SU_A3
+Iceland,ISL,SU_A3
+India,IND,SU_A3
+Indonesia,IDN,SU_A3
+Iran,IRN,SU_A3
+Iraq,IRQ,SU_A3
+Ireland,IRL,SU_A3
+Israel,ISR,SU_A3
+Italy,ITA,SU_A3
+Jamaica,JAM,SU_A3
+Japan,JPN,SU_A3
+Jersey,JEY,SU_A3
+Jordan,JOR,SU_A3
+Kazakhstan,KAZ,SU_A3
+Kenya,KEN,SU_A3
+Kosovo,KOS,SU_A3
+Kiribati,KIR,SU_A3
+North Korea,PRK,SU_A3
+South Korea,KOR,SU_A3
+Kuwait,KWT,SU_A3
+Kyrgyzstan,KGZ,SU_A3
+Laos,LAO,SU_A3
+Latvia,LVA,SU_A3
+Lebanon,LBN,SU_A3
+Lesotho,LSO,SU_A3
+Liberia,LBR,SU_A3
+Libya,LBY,SU_A3
+Liechtenstein,LIE,SU_A3
+Lithuania,LTU,SU_A3
+Luxembourg,LUX,SU_A3
+Macedonia,MKD,SU_A3
+Madagascar,MDG,SU_A3
+Malawi,MWI,SU_A3
+Malaysia,MYS,SU_A3
+Maldives,MDV,SU_A3
+Mali,MLI,SU_A3
+Malta,MLT,SU_A3
+Mauritania,MRT,SU_A3
+Mauritius,MUS,SU_A3
+Mexico,MEX,SU_A3
+Federated States of Micronesia,FSM,SU_A3
+Moldova,MDA,SU_A3
+Monaco,MCO,SU_A3
+Mongolia,MNG,SU_A3
+Montenegro,MNE,SU_A3
+Morocco,MAR,SU_A3
+Mozambique,MOZ,SU_A3
+Myanmar,MMR,SU_A3
+Namibia,NAM,SU_A3
+Nauru,NRU,SU_A3
+Nepal,NPL,SU_A3
+Netherlands,NLD,SU_A3
+New Zealand,NZL,SU_A3
+Nicaragua,NIC,SU_A3
+Niger,NER,SU_A3
+Nigeria,NGA,SU_A3
+Niue,NIU,SU_A3
+Northern Mariana Islands,MNP,SU_A3
+Norway,NOR,SU_A3
+Oman,OMN,SU_A3
+Pakistan,PAK,SU_A3
+Palau,PLW,SU_A3
+Palestine,PSE,ISO_A3
+Panama,PAN,SU_A3
+Papua New Guinea,PNG,ISO_A3
+Paraguay,PRY,SU_A3
+Peru,PER,SU_A3
+Philippines,PHL,SU_A3
+Poland,POL,SU_A3
+Portugal,PRT,ISO_A3
+Puerto Rico,PRI,SU_A3
+Qatar,QAT,SU_A3
+Romania,ROU,SU_A3
+Rwanda,RWA,SU_A3
+Russia,RUS,SU_A3
+Saint Helena,SHN,SU_A3
+Saint Kitts and Nevis,KNA,SU_A3
+Saint Lucia,LCA,SU_A3
+Saint Vincent and the Grenadines,VCT,SU_A3
+Samoa,WSM,SU_A3
+San Marino,SMR,SU_A3
+Sao Tome and Principe,STP,SU_A3
+Saudi Arabia,SAU,SU_A3
+Senegal,SEN,SU_A3
+Republic of Serbia,SRB,SU_A3
+Seychelles,SYC,SU_A3
+Sierra Leone,SLE,SU_A3
+Singapore,SGP,SU_A3
+Slovakia,SVK,SU_A3
+Slovenia,SVN,SU_A3
+Solomon Islands,SLB,SU_A3
+Somalia,SOM,SU_A3
+Somaliland,SOL,SU_A3
+South Africa,ZAF,SU_A3
+South Sudan,SSD,ISO_A3
+Spain,ESP,SU_A3
+Sri Lanka,LKA,SU_A3
+Sudan,SDN,SU_A3
+Suriname,SUR,SU_A3
+Swaziland,SWZ,SU_A3
+Sweden,SWE,SU_A3
+Switzerland,CHE,SU_A3
+Syria,SYR,SU_A3
+Taiwan,TWN,SU_A3
+Tajikistan,TJK,SU_A3
+United Republic of Tanzania,TZA,SU_A3
+Thailand,THA,SU_A3
+East Timor,TLS,SU_A3
+Togo,TGO,SU_A3
+Tonga,TON,SU_A3
+Trinidad and Tobago,TTO,SU_A3
+Tunisia,TUN,SU_A3
+Turkey,TUR,SU_A3
+Turkmenistan,TKM,SU_A3
+Turks and Caicos Islands,TCA,SU_A3
+Uganda,UGA,SU_A3
+Ukraine,UKR,SU_A3
+United Arab Emirates,ARE,SU_A3
+United Kingdom,GBR,SU_A3
+United States Of America,USA,SU_A3
+Uruguay,URY,SU_A3
+Uzbekistan,UZB,SU_A3
+Vanuatu,VUT,SU_A3
+Venezuela,VEN,SU_A3
+Vietnam,VNM,SU_A3
+Western Sahara,ESH,ISO_A3
+Yemen,YEM,SU_A3
+Zambia,ZMB,SU_A3
+Zimbabwe,ZWE,SU_A3

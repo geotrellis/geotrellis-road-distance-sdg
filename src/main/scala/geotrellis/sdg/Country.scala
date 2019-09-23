@@ -1,74 +1,79 @@
 package geotrellis.sdg
 
-import geotrellis.layer.{LayoutDefinition, LayoutTileSource, SpatialKey}
+import cats.data.{NonEmptyList, Validated}
+import com.monovore.decline.Argument
 import geotrellis.raster.RasterSource
 import geotrellis.raster.geotiff.GeoTiffRasterSource
 import geotrellis.vector._
 import geotrellis.shapefile._
+import cats.syntax.list._
 
 import scala.collection.concurrent.TrieMap
 
-case class Country(code: String) {
+/**
+ * @param name Country name, maps to MapBox QA tiles name
+ * @param code three character letter country code used by WorldPop
+ * @param domain code domain (ex: ISO_A3, SU_A3, WB_A3) used to lookup country boundary
+ */
+case class Country(name: String, code: String, domain: String = "SU_A3") {
   @transient lazy val rasterSource: RasterSource = {
-    val url = s"s3://azavea-worldpop/Population/Global_2000_2020/MOSAIC_2019/ppp_prj_2019_${code.toUpperCase()}.tif"
+    val base = "s3://azavea-worldpop/Population/Global_2000_2020/MOSAIC_2019"
+    val url = s"${base}/ppp_prj_2019_${code.toUpperCase()}.tif"
     Country.rasterSourceCache.getOrElseUpdate(url, GeoTiffRasterSource(url))
   }
 
-  def feature: MultiPolygonFeature[Map[String, Object]] = {
+  def boundary: MultiPolygon = {
     // Assume only fromString constructor has been used, so this is "safe"
-    Country.allCountries(code)
+    Country.naturalEarthFeatures((code, domain))
   }
 
-  def name: String = Country.allCountries(code).data("NAME_LONG").asInstanceOf[String]
+  def mapboxQaTilesUrl: String = {
+    val base: String = "s3://mapbox/osm-qa-tiles-production/latest.country"
+    val slug = name.toLowerCase.replace(" ", "_")
+    s"${base}/${slug}.mbtiles.gz"
+  }
 }
 
 object Country {
   @transient private lazy val rasterSourceCache = TrieMap.empty[String, RasterSource]
 
-  val countries: Array[(String, String)] = {
-    val lines = Resource.lines("countries.csv")
-    lines
+  val all: NonEmptyList[Country] = {
+    Resource.lines("countries.csv")
+      .toList.toNel.get
       .map { _.split(",").map { _.trim } }
       .map { arr =>
-        val name = arr(0).toLowerCase.replaceAll(" ", "_")
+        val name = arr(0)
         val code = arr(1).toUpperCase()
-
-        (name, code)
-      }.toArray
+        val domain = arr(2).toUpperCase()
+        Country(name, code, domain)
+      }
   }
 
-  val allCountries: Map[String, MultiPolygonFeature[Map[String,Object]]] = {
-    // this list was hand-curated to match WorldPop country code to QA tiles download
+  val naturalEarthFeatures: Map[(String, String), MultiPolygon] = {
+    val domains = List("ISO_A3", "SU_A3")
+    def filterCode(code: String): Option[String] = if (code == "-99") None else Some(code)
 
-    val availableCodes = countries.map(_._2)
     val url = getClass.getResource("/ne_50m_admin_0_countries.shp")
-    ShapeFileReader.readMultiPolygonFeatures(url).map { feature =>
-      val isoCode = feature.data("SU_A3").asInstanceOf[String]
-      (isoCode, feature)
-    }.
-      filter(_._1 != "-99").
-      filter(r => availableCodes.contains(r._1)). // shapefile has too many administrative boundaries
-      toMap
-  }
-
-  def slug(name: String): String = {
-    name.toLowerCase.replace(' ', '_')
+    ShapeFileReader.readMultiPolygonFeatures(url).flatMap { feature =>
+      for {
+        domain <- domains
+        code <- filterCode(feature.data(domain).asInstanceOf[String])
+      } yield ((code, domain), feature.geom)
+    }.toMap
   }
 
   def fromCode(code: String): Option[Country] = {
-    allCountries.get(code).map { country =>
-      val code = country.data("SU_A3").asInstanceOf[String]
-      Country(code.toUpperCase())
-    }
+    all.find(_.code == code)
   }
 
-  def codeToName(code: String): String = {
-    val filteredCountries: Array[(String, String)] =
-      countries.filter { case (_, c) =>  c == code }
+  implicit val countryArgument: Argument[Country] = new Argument[Country] {
+    def read(string: String): Validated[NonEmptyList[String], Country] = {
+      fromCode(string) match {
+        case Some(country) => Validated.valid(country)
+        case None => Validated.invalidNel(s"Invalid country code: $string")
+      }
+    }
 
-    if (filteredCountries.isEmpty)
-      throw new Error(s"Could not find name for country code: $code")
-    else
-      filteredCountries.head._1
+    def defaultMetavar = "WorldPop Country Code"
   }
 }

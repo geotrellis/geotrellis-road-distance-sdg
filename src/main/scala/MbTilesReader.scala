@@ -140,6 +140,6 @@ object MbTilesReader {
 
     filteredDataFrame
       .withColumn("bufferedGeom", bufferGeomsUDF(filteredDataFrame.col("geom")))
-      .withColumn("countryName", lit(Country.codeToName(countryCode)))
+      .withColumn("countryName", lit(???))
   }
 }

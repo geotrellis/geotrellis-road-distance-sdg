@@ -1,5 +1,5 @@
 name := "geotrellis-road-distance-sdg"
-version := "0.13"
+version := "0.14"
 scalaVersion := "2.11.12"
 organization := "geotrellis"
 
