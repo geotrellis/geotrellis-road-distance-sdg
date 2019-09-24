@@ -9,12 +9,15 @@ import java.net.URI
 
 import geotrellis.raster.io.geotiff.GeoTiff
 import geotrellis.raster.rasterize.Rasterizer
+import geotrellis.spark.clip.ClipToGrid
+import geotrellis.spark.clip.ClipToGrid.Predicates
 import org.apache.spark.{Partitioner, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.geotools.data.FeatureReader
 import org.geotools.data.shapefile.ShapefileDataStore
 import org.geotools.feature.FeatureReaderIterator
+import org.locationtech.jts.geom.prep.PreparedGeometryFactory
 import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
 
 import scala.collection.mutable
@@ -80,5 +83,45 @@ case class Grump(uri: URI, crs: CRS = LatLng) {
       for { geom <- geoms} Rasterizer.foreachCellByGeometry(geom, re, options) { (col, row) => mask.set(col, row, 1)}
       mask
     }
+  }
+
+  def readAll(partitionCount: Int)(implicit spark: SparkSession): RDD[Geometry] = {
+    val sfr: FeatureReader[SimpleFeatureType, SimpleFeature] = source.getReader()
+    val it = featureReaderToIterator(sfr).map(_.buffer(0)) // buffer fixes self-intersecting nodes
+    spark.sparkContext.parallelize(it.toSeq, partitionCount)
+  }
+}
+
+object Grump {
+
+  def masksForBoundary(
+    rdd: RDD[Geometry],
+    layout: LayoutDefinition,
+    boundary: MultiPolygon,
+    part: Partitioner
+  ): RDD[(SpatialKey, Tile)] = {
+    // prepared geometries are not serializable
+    @transient lazy val prep = PreparedGeometryFactory.prepare(boundary)
+
+    val clipFeature: (Extent, Feature[Geometry, Unit], Predicates) => Option[Feature[Geometry, Unit]] = {
+      (extent, feature, pred) =>
+        if (prep.intersects(feature.geom)) ClipToGrid.clipFeatureToExtent(extent, feature, pred)
+        else None // if feature does not intersect our boundary, discard it
+    }
+
+    val featureRdd = rdd.map( g => Feature(g, ()))
+
+    ClipToGrid(featureRdd, layout,clipFeature)
+      .groupByKey(part)
+      .mapPartitions({ iter =>
+        iter.map { case (key, features) =>
+          val options = Rasterizer.Options(includePartial = false, sampleType = PixelIsPoint)
+          val mask = ArrayTile.empty(BitCellType, layout.tileCols, layout.tileRows)
+          val keyExtent = layout.mapTransform.keyToExtent(key)
+          val re = RasterExtent(keyExtent, mask.cols, mask.rows)
+          for (f <- features) Rasterizer.foreachCellByGeometry(f.geom, re, options) { (col, row) => mask.set(col, row, 1) }
+          (key, mask)
+        }
+      }, preservesPartitioning = true)
   }
 }

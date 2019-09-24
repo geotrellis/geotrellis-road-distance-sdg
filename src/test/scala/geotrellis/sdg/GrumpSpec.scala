@@ -23,7 +23,7 @@ class GrumpSpec extends WordSpec with Matchers with TestEnvironment {
       }
 
       "read masks as RDD[(SpatialKey, Tile]) for country" in {
-        val mwiBorder = Country.allCountries("MWI").geom
+        val mwiBorder = Country.fromCode("MWI").get.boundary
         val scheme = ZoomedLayoutScheme(LatLng, 1024)
         val layout = scheme.levelForZoom(6).layout
         val rdd = grump.queryAsMaskRdd(mwiBorder, layout, new HashPartitioner(16))

@@ -34,7 +34,7 @@ import scala.concurrent.{Await, Future}
   */
 class PopulationNearRoadsJob(
   country: Country,
-  grumpUri: URI,
+  grumpRdd: RDD[Geometry],
   layout: LayoutDefinition,
   crs: CRS
 )(implicit spark: SparkSession) extends LazyLogging with Serializable {
@@ -44,8 +44,6 @@ class PopulationNearRoadsJob(
 
   @transient lazy val layoutTileSource: LayoutTileSource[SpatialKey] =
     LayoutTileSource.spatial(rasterSource, layout)
-
-  val grump = Grump(grumpUri, layoutTileSource.source.crs)
 
   val wsCountryBorder: MultiPolygon = country.boundary.reproject(LatLng, layoutTileSource.source.crs)
   val countryRdd: RDD[Country] = spark.sparkContext.parallelize(Array(country), 1)
@@ -89,8 +87,8 @@ class PopulationNearRoadsJob(
 
   // TODO: try read and tile approach for performance
   val grumpMaskRdd: RDD[(SpatialKey, Tile)] =
-    grump.queryAsMaskRdd(wsCountryBorder, layout, partitioner).
-      setName(s"${country.code} GRUMP Mask")
+    Grump.masksForBoundary(grumpRdd, layout, wsCountryBorder, partitioner)
+      .setName(s"${country.code} GRUMP Mask")
 
   val popRegions: RDD[(SpatialKey, SummaryRegion)] =
     regionsRdd.

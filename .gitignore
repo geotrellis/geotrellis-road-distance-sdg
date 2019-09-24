@@ -10,5 +10,5 @@ derby.log
 metastore_db/
 *.log
 .idea
-.clust_id
+.cluster_id
 .DS_Store

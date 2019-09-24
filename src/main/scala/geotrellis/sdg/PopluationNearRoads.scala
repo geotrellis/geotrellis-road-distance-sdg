@@ -21,6 +21,8 @@ import org.apache.spark.storage.StorageLevel
 import scala.concurrent.{Await, Future}
 import cats.implicits._
 import cats.syntax.list._
+import geotrellis.raster.io.geotiff.compression.DeflateCompression
+import geotrellis.raster.io.geotiff.{GeoTiffBuilder, GeoTiffOptions, Tags, Tiled}
 
 
 /**
@@ -45,9 +47,7 @@ object PopulationNearRoads extends CommandApp(
       help = "spark.default.parallelism").
       orNone
 
-    // TODO: Add .mbtiles URI and RasterSource URI to countries.csv
     // TODO: Add --playbook parameter that allows swapping countries.csv
-    // TODO: Re-use road masking code to render WorldPop
     // TODO: Add option to save JSON without country borders
 
     (countryOpt, excludeOpt, outputPath, partitions).mapN {
@@ -70,8 +70,10 @@ object PopulationNearRoads extends CommandApp(
 
       try {
         val countries = countriesInclude.toList.diff(excludeCountries)
-        //val grumpUri = new URI("file:/Users/eugene/Downloads/grump-v1-urban-ext-polygons-rev01-shp/global_urban_extent_polygons_v1.01.shp")
+
         val grumpUri = new URI("https://un-sdg.s3.amazonaws.com/data/grump-v1.01/global_urban_extent_polygons_v1.01.shp")
+        val grump  = Grump(grumpUri)
+        val grumpRdd = grump.readAll(256).persist(StorageLevel.MEMORY_AND_DISK_SER)
 
         import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -82,19 +84,19 @@ object PopulationNearRoads extends CommandApp(
             val rasterSource = country.rasterSource
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
 
-            val job = new PopulationNearRoadsJob(country, grumpUri, layout, LatLng)
+            val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng)
             job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
             job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
             val (summary, histogram) = job.result
 
-            //// Save country as GeoTIFF for inspection
-            //  val builder = GeoTiffBuilder.singlebandGeoTiffBuilder
-            //  val md = job.forgottenLayer.metadata
-            //  val segments = job.forgottenLayer.collect().toMap
-            //  val tile = builder.makeTile(segments.toIterator, layout.tileLayout, md.cellType, Tiled(256), DeflateCompression)
-            //  val extent = md.layout.extent
-            //  val geotiff = builder.makeGeoTiff(tile, extent, md.crs, Tags.empty, GeoTiffOptions.DEFAULT)
-            //  geotiff.write("/tmp/wmi-masked.tif"
+            /** Save country as GeoTIFF for inspection */
+            //val builder = GeoTiffBuilder.singlebandGeoTiffBuilder
+            //val md = job.forgottenLayer.metadata
+            //val segments = job.forgottenLayer.collect().toMap
+            //val tile = builder.makeTile(segments.toIterator, layout.tileLayout, md.cellType, Tiled(256), DeflateCompression)
+            //val extent = md.layout.extent
+            //val geotiff = builder.makeGeoTiff(tile, extent, md.crs, Tags.empty, GeoTiffOptions.DEFAULT)
+            //geotiff.write(s"/tmp/${country.code}-masked.tif")
 
             // OutputPyramid.saveLayer(job.forgottenLayer, histogram, new URI("s3://un-sdg/catalog/roads"), country.code)
 
