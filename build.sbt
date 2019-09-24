@@ -70,7 +70,7 @@ assemblyMergeStrategy in assembly := {
   case _ => MergeStrategy.first
 }
 
-sparkInstanceCount          := 64
+sparkInstanceCount          := 32
 sparkMasterType             := "m4.4xlarge"
 sparkCoreType               := "m4.4xlarge"
 sparkMasterPrice            := Some(1.00)
