@@ -22,11 +22,11 @@ case class SummaryRegion(
   def forgottenPopTile: Option[Tile] = {
     pop.raster.map { popRaster =>
       val pop = popRaster.tile.band(0)
-      val roads = roadMask.getOrElse(BitConstantTile(0, pop.cols, pop.rows))
-      val grump = grumpMask.getOrElse(BitConstantTile(0, pop.cols, pop.rows))
+      val roads = roadMask.getOrElse(BitArrayTile.empty(pop.cols, pop.rows))
+      val grump = grumpMask.getOrElse(BitArrayTile.empty(pop.cols, pop.rows))
 
       // SERVED
-      // pop.localMask(grump.localNot.localAnd(roads), readMask = 0, writeMask = NODATA)
+      //pop.localMask(grump.localNot.localAnd(roads), readMask = 0, writeMask = NODATA)
       // LOST
       pop.localMask(grump.localOr(roads), readMask = 1, writeMask = NODATA)
     }
@@ -44,8 +44,8 @@ case class SummaryRegion(
 
     pop.raster.map { popRaster =>
       val pop = popRaster.tile.band(0)
-      val roads = roadMask.getOrElse(BitConstantTile(0, pop.cols, pop.rows))
-      val grump = grumpMask.getOrElse(BitConstantTile(0, pop.cols, pop.rows))
+      val roads = roadMask.getOrElse(BitArrayTile.empty(pop.cols, pop.rows))
+      val grump = grumpMask.getOrElse(BitArrayTile.empty(pop.cols, pop.rows))
       // how do I get the mask for rural areas far away from roads: GRUMP == 0 && ROADs == 0
       PopulationSummary(
         total = cellSum(pop),
