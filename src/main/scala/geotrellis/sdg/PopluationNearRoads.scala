@@ -12,9 +12,17 @@ import com.monovore.decline._
 import com.typesafe.scalalogging.LazyLogging
 import geotrellis.vector.io.json.JsonFeatureCollection
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import _root_.io.circe.syntax._
 import cats.data.Validated
+import geotrellis.layer.LayoutDefinition
+import geotrellis.proj4.LatLng
+import org.apache.spark.storage.StorageLevel
+
+import scala.concurrent.{Await, Future}
+import cats.implicits._
+import cats.syntax.list._
+import geotrellis.raster.io.geotiff.compression.DeflateCompression
+import geotrellis.raster.io.geotiff.{GeoTiffBuilder, GeoTiffOptions, Tags, Tiled}
 
 
 /**
@@ -24,17 +32,11 @@ object PopulationNearRoads extends CommandApp(
   name = "Population Near Roads",
   header = "Summarize population within and without 2km of OSM roads",
   main = {
-    val countryCodesOpt = Opts.options[String](long = "country", short = "c",
+    val countryOpt = Opts.options[Country](long = "country", short = "c",
       help = "Country code to use for input").
-      withDefault(Country.allCountries.keys.toList.toNel.get).
-      mapValidated({ codes =>
-        codes.filter{ c => Country.fromCode(c).isEmpty } match {
-          case Nil => Validated.valid(codes)
-          case badCodes => Validated.invalidNel(s"Invalid countries: ${badCodes}")
-        }
-      })
+      withDefault(Country.all)
 
-    val excludeCodesOpt = Opts.options[String](long = "exclude", short = "x",
+    val excludeOpt = Opts.options[Country](long = "exclude", short = "x",
       help = "Country code to exclude from input").
       orEmpty
 
@@ -45,13 +47,11 @@ object PopulationNearRoads extends CommandApp(
       help = "spark.default.parallelism").
       orNone
 
-    // TODO: Add .mbtiles URI and RasterSource URI to countries.csv
     // TODO: Add --playbook parameter that allows swapping countries.csv
-    // TODO: Re-use road masking code to render WorldPop
     // TODO: Add option to save JSON without country borders
 
-    (countryCodesOpt,excludeCodesOpt, outputPath, partitions).mapN {
-      (countryCodes, excludeCodes, output, partitionNum) =>
+    (countryOpt, excludeOpt, outputPath, partitions).mapN {
+      (countriesInclude, excludeCountries, output, partitionNum) =>
 
       System.setSecurityManager(null)
       val conf = new SparkConf()
@@ -69,14 +69,52 @@ object PopulationNearRoads extends CommandApp(
         SparkSession.builder.config(conf).enableHiveSupport.getOrCreate.withJTS
 
       try {
-        val countries = countryCodes.toList.diff(excludeCodes).map({ code => Country.fromCode(code).get })
-        val result =  PopulationNearRoadsJob(countries, partitionNum)
-        result.foreach(println)
+        val countries = countriesInclude.toList.diff(excludeCountries)
+
+        val grumpUri = new URI("https://un-sdg.s3.amazonaws.com/data/grump-v1.01/global_urban_extent_polygons_v1.01.shp")
+        val grump  = Grump(grumpUri)
+        val grumpRdd = grump.readAll(256).persist(StorageLevel.MEMORY_AND_DISK_SER)
+
+        import scala.concurrent.ExecutionContext.Implicits.global
+
+        val result: Map[Country, PopulationSummary] =  {
+          val future = Future.traverse(countries)( country => Future {
+            spark.sparkContext.setJobGroup(country.code, country.name)
+
+            val rasterSource = country.rasterSource
+            println(s"Reading: $country: ${rasterSource.name}")
+            val layout = LayoutDefinition(rasterSource.gridExtent, 256)
+
+            val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng)
+            job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
+            job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
+            val (summary, histogram) = job.result
+
+            /** Save country as GeoTIFF for inspection */
+            //val builder = GeoTiffBuilder.singlebandGeoTiffBuilder
+            //val md = job.forgottenLayer.metadata
+            //val segments = job.forgottenLayer.collect().toMap
+            //val tile = builder.makeTile(segments.toIterator, layout.tileLayout, md.cellType, Tiled(256), DeflateCompression)
+            //val extent = md.layout.extent
+            //val geotiff = builder.makeGeoTiff(tile, extent, md.crs, Tags.empty, GeoTiffOptions.DEFAULT)
+            //geotiff.write(s"/tmp/${country.code}-masked.tif")
+
+             OutputPyramid.saveLayer(job.forgottenLayer, histogram, new URI("s3://un-sdg/catalog/roads"), country.code)
+
+            job.grumpMaskRdd.unpersist()
+            job.forgottenLayer.unpersist()
+
+            spark.sparkContext.clearJobGroup()
+            (country, summary)
+          })
+          Await.result(future, scala.concurrent.duration.Duration.Inf).toMap
+        }
+
+        result.foreach({ case (c, s) => println(c.code + " " + s.report) })
 
         val collection = JsonFeatureCollection()
         result.foreach { case (country, summary) =>
-            val adminFeature = country.feature
-            val f = Feature(adminFeature.geom, summary.toOutput(country).asJson)
+            val f = Feature(country.boundary, OutputProperties(country, summary).asJson)
             collection.add(f)
         }
 
