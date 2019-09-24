@@ -82,6 +82,7 @@ object PopulationNearRoads extends CommandApp(
             spark.sparkContext.setJobGroup(country.code, country.name)
 
             val rasterSource = country.rasterSource
+            println(s"Reading: $country: ${rasterSource.name}")
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
 
             val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng)

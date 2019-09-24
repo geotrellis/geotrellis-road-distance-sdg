@@ -18,7 +18,9 @@ import scala.collection.concurrent.TrieMap
 case class Country(name: String, code: String, domain: String = "SU_A3") {
   @transient lazy val rasterSource: RasterSource = {
     val base = "s3://azavea-worldpop/Population/Global_2000_2020/MOSAIC_2019"
-    val url = s"${base}/ppp_prj_2019_${code.toUpperCase()}.tif"
+    // WorldPop doesn't know about Somaliland
+    val wpCode = if (code == "SOL") "SOM" else code
+    val url = s"${base}/ppp_prj_2019_${wpCode}.tif"
     Country.rasterSourceCache.getOrElseUpdate(url, GeoTiffRasterSource(url))
   }
 
