@@ -99,7 +99,7 @@ object PopulationNearRoads extends CommandApp(
             //val geotiff = builder.makeGeoTiff(tile, extent, md.crs, Tags.empty, GeoTiffOptions.DEFAULT)
             //geotiff.write(s"/tmp/${country.code}-masked.tif")
 
-            // OutputPyramid.saveLayer(job.forgottenLayer, histogram, new URI("s3://un-sdg/catalog/roads"), country.code)
+             OutputPyramid.saveLayer(job.forgottenLayer, histogram, new URI("s3://un-sdg/catalog/roads"), country.code)
 
             job.grumpMaskRdd.unpersist()
             job.forgottenLayer.unpersist()
