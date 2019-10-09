@@ -10,7 +10,7 @@ import geotrellis.raster.rasterize.Rasterizer
 import geotrellis.raster._
 import geotrellis.raster.io.geotiff.compression.DeflateCompression
 import geotrellis.raster.io.geotiff.tags.codes.CompressionType
-import geotrellis.raster.io.geotiff.{GeoTiffBuilder, GeoTiffOptions, Tags, Tiled}
+import geotrellis.raster.io.geotiff.{GeoTiffBuilder, GeoTiffOptions, SinglebandGeoTiff, Tags, Tiled}
 import geotrellis.spark.{ContextRDD, TileLayerRDD}
 import geotrellis.vector._
 import geotrellis.vectortile.VectorTile
@@ -36,7 +36,8 @@ class PopulationNearRoadsJob(
   country: Country,
   grumpRdd: RDD[Geometry],
   layout: LayoutDefinition,
-  crs: CRS
+  crs: CRS,
+  roadFilter: RoadTags => Boolean
 )(implicit spark: SparkSession) extends LazyLogging with Serializable {
   import PopulationNearRoadsJob._
 
@@ -75,7 +76,7 @@ class PopulationNearRoadsJob(
     allKeysRdd.partitionBy(partitioner).flatMap { case (key, _) =>
       val qaTiles = OsmQaTiles.fetchFor(country)
       val row = qaTiles.fetchRow(key).get
-      val roads: Seq[MultiLineString] = extractRoads(row.tile)(t => t.isPossiblyMotorRoad && t.isStrictlyAllWeather)
+      val roads: Seq[MultiLineString] = extractRoads(row.tile, roadFilter)
       val buffered = roads.map(GeometryUtils.bufferByMeters(_, WebMercator, layoutTileSource.source.crs, meters = 2000))
       burnRoadMask(layoutTileSource.layout, buffered)
     }
@@ -188,12 +189,24 @@ object PopulationNearRoadsJob extends LazyLogging {
    * @param tile MapBox OSM VectorTile, assumed to have "osm" layer
    * @param filter filter function on highway tag and surface tag
    */
-  def extractRoads(tile: VectorTile)(filter: RoadTags => Boolean): Seq[MultiLineString] = {
+  def extractRoads(tile: VectorTile, filter: RoadTags => Boolean): Seq[MultiLineString] = {
     tile.layers("osm").lines.
       filter(f => filter(RoadTags(f.data))).
       map(f => MultiLineString(f.geom)) ++
     tile.layers("osm").multiLines.
       filter(f => filter(RoadTags(f.data))).
       map(_.geom)
+  }
+  /** Save country as GeoTIFF for inspection
+   * @note This method relies on collecting layer tiles to the master.
+   *       Don't expect it to work for larger countries.
+   */
+  def layerToGeoTiff(layer: TileLayerRDD[SpatialKey]): SinglebandGeoTiff = {
+    val builder = GeoTiffBuilder.singlebandGeoTiffBuilder
+    val md = layer.metadata
+    val segments = layer.collect().toMap
+    val tile = builder.makeTile(segments.toIterator, md.layout.tileLayout, md.cellType, Tiled(256), DeflateCompression)
+    val extent = md.layout.extent
+    builder.makeGeoTiff(tile, extent, md.crs, Tags.empty, GeoTiffOptions.DEFAULT)
   }
 }

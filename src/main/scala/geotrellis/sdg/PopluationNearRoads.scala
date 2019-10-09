@@ -43,6 +43,10 @@ object PopulationNearRoads extends CommandApp(
     val outputPath = Opts.option[String](long = "output",
       help = "The path/uri of the summary JSON file")
 
+    val outputCatalogOpt = Opts.option[URI](long = "catalog",
+      help = "Catalog path to for saving masked WorldPop layers").
+      orNone
+
     val partitions = Opts.option[Int]("partitions",
       help = "spark.default.parallelism").
       orNone
@@ -50,8 +54,8 @@ object PopulationNearRoads extends CommandApp(
     // TODO: Add --playbook parameter that allows swapping countries.csv
     // TODO: Add option to save JSON without country borders
 
-    (countryOpt, excludeOpt, outputPath, partitions).mapN {
-      (countriesInclude, excludeCountries, output, partitionNum) =>
+    (countryOpt, excludeOpt, outputPath, outputCatalogOpt, partitions).mapN {
+      (countriesInclude, excludeCountries, output, outputCatalog, partitionNum) =>
 
       System.setSecurityManager(null)
       val conf = new SparkConf()
@@ -85,21 +89,18 @@ object PopulationNearRoads extends CommandApp(
             println(s"Reading: $country: ${rasterSource.name}")
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
 
-            val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng)
+            val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng,
+              { t => t.isPossiblyMotorRoad /* && t.isStrictlyAllWeather*/ } )
+
             job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
             job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
             val (summary, histogram) = job.result
 
-            /** Save country as GeoTIFF for inspection */
-            //val builder = GeoTiffBuilder.singlebandGeoTiffBuilder
-            //val md = job.forgottenLayer.metadata
-            //val segments = job.forgottenLayer.collect().toMap
-            //val tile = builder.makeTile(segments.toIterator, layout.tileLayout, md.cellType, Tiled(256), DeflateCompression)
-            //val extent = md.layout.extent
-            //val geotiff = builder.makeGeoTiff(tile, extent, md.crs, Tags.empty, GeoTiffOptions.DEFAULT)
-            //geotiff.write(s"/tmp/${country.code}-masked.tif")
+            PopulationNearRoadsJob.layerToGeoTiff(job.forgottenLayer).write(s"/tmp/sdg-${country.code}-all-roads.tif")
 
-             OutputPyramid.saveLayer(job.forgottenLayer, histogram, new URI("s3://un-sdg/catalog/roads"), country.code)
+            outputCatalog.foreach { uri =>
+              OutputPyramid.saveLayer(job.forgottenLayer, histogram, uri, country.code)
+            }
 
             job.grumpMaskRdd.unpersist()
             job.forgottenLayer.unpersist()

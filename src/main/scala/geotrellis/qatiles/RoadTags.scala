@@ -53,4 +53,3 @@ object RoadTags {
     "compacted",  "woodchips", "grass_paver", "grass", "dirt", "earth", "mud", "ground",
     "fine_gravel", "gravel", "gravel_turf", "pebblestone", "salt", "sand", "snow", "unpaved")
 }
-
