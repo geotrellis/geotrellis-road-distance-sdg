@@ -12,3 +12,4 @@ metastore_db/
 .idea
 .cluster_id
 .DS_Store
+.metals

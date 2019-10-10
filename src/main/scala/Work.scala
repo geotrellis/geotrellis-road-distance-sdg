@@ -13,6 +13,8 @@ import org.locationtech.geomesa.spark.jts._
 
 import org.locationtech.jts.geom.{Geometry => JTSGeometry}
 
+import org.log4s._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.storage._
 import org.apache.spark.rdd.RDD
@@ -24,16 +26,18 @@ import org.apache.spark.sql.jts.GeometryUDT
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import com.typesafe.scalalogging.LazyLogging
-
 import cats.implicits._
 import com.monovore.decline._
 
 import java.io.File
 
 
-object Work extends LazyLogging {
+object Work {
+
+  @transient private[this] lazy val logger = getLogger
+
   def produceGlobalMask(countries: Array[(String, String)], partitionNum: Int)(implicit ss: SparkSession): DataFrame = {
+
     val countriesRDD: RDD[(String, String)] =
       ss.sparkContext.parallelize(countries, partitionNum)
 

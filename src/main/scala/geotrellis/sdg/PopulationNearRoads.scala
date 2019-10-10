@@ -1,28 +1,31 @@
 package geotrellis.sdg
 
+import geotrellis.vector._
+import geotrellis.vector.io.json.JsonFeatureCollection
+import geotrellis.layer.LayoutDefinition
+import geotrellis.proj4.LatLng
+import geotrellis.raster.io.geotiff.compression.DeflateCompression
+import geotrellis.raster.io.geotiff.{GeoTiffBuilder, GeoTiffOptions, Tags, Tiled}
+
+import cats.implicits._
+import cats.syntax.list._
+import cats.data.Validated
+
+import com.monovore.decline._
+
+import org.locationtech.geomesa.spark.jts._
+
+import _root_.io.circe.syntax._
+
+import org.apache.spark.storage.StorageLevel
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark._
+import org.apache.spark.sql._
+
 import java.io.PrintWriter
 import java.net.URI
 
-import geotrellis.vector._
-import org.locationtech.geomesa.spark.jts._
-import org.apache.spark._
-import org.apache.spark.sql._
-import cats.implicits._
-import com.monovore.decline._
-import com.typesafe.scalalogging.LazyLogging
-import geotrellis.vector.io.json.JsonFeatureCollection
-import org.apache.hadoop.fs.{FileSystem, Path}
-import _root_.io.circe.syntax._
-import cats.data.Validated
-import geotrellis.layer.LayoutDefinition
-import geotrellis.proj4.LatLng
-import org.apache.spark.storage.StorageLevel
-
 import scala.concurrent.{Await, Future}
-import cats.implicits._
-import cats.syntax.list._
-import geotrellis.raster.io.geotiff.compression.DeflateCompression
-import geotrellis.raster.io.geotiff.{GeoTiffBuilder, GeoTiffOptions, Tags, Tiled}
 
 
 /**
@@ -33,7 +36,7 @@ object PopulationNearRoads extends CommandApp(
   header = "Summarize population within and without 2km of OSM roads",
   main = {
     val countryOpt = Opts.options[Country](long = "country", short = "c",
-      help = "Country code to use for input").
+      help = "ISO 3 country code to use for input (cf https://unstats.un.org/unsd/tradekb/knowledgebase/country-code)").
       withDefault(Country.all)
 
     val excludeOpt = Opts.options[Country](long = "exclude", short = "x",
