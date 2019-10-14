@@ -97,9 +97,13 @@ object PopulationNearRoads extends CommandApp(
 
             job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
             job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
+            job.servedLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
+
             val (summary, histogram) = job.result
 
-            PopulationNearRoadsJob.layerToGeoTiff(job.forgottenLayer).write(s"/tmp/sdg-${country.code}-all-roads.tif")
+
+            PopulationNearRoadsJob.layerToGeoTiff(job.forgottenLayer)
+              .write(s"/tmp/sdg-${country.code}-all-roads.tif")
 
             outputCatalog.foreach { uri =>
               OutputPyramid.saveLayer(job.forgottenLayer, histogram, uri, country.code)

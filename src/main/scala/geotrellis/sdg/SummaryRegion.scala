@@ -25,12 +25,21 @@ case class SummaryRegion(
       val roads = roadMask.getOrElse(BitArrayTile.empty(pop.cols, pop.rows))
       val grump = grumpMask.getOrElse(BitArrayTile.empty(pop.cols, pop.rows))
 
-      // SERVED
-      //pop.localMask(grump.localNot.localAnd(roads), readMask = 0, writeMask = NODATA)
-      // LOST
       pop.localMask(grump.localOr(roads), readMask = 1, writeMask = NODATA)
     }
   }
+
+  /** Urban or w/in 2km of allweather road */
+  def servedPopTile: Option[Tile] = {
+    pop.raster.map { popRaster =>
+      val pop = popRaster.tile.band(0)
+      val roads = roadMask.getOrElse(BitArrayTile.empty(pop.cols, pop.rows))
+      val grump = grumpMask.getOrElse(BitArrayTile.empty(pop.cols, pop.rows))
+
+      pop.localMask(grump.localNot.localAnd(roads), readMask = 0, writeMask = NODATA)
+    }
+  }
+
 
   def summary: Option[PopulationSummary] = {
     def cellSum(tile: Tile): Double = {

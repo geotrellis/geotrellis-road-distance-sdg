@@ -12,7 +12,7 @@ import scala.collection.concurrent.TrieMap
 
 /**
  * @param name Country name, maps to MapBox QA tiles name
- * @param code three character letter country code used by WorldPop
+ * @param code ISO 3 country code; used by WorldPop (cf https://unstats.un.org/unsd/tradekb/knowledgebase/country-code)
  * @param domain code domain (ex: ISO_A3, SU_A3, WB_A3) used to lookup country boundary
  */
 case class Country(name: String, code: String, domain: String = "SU_A3") {

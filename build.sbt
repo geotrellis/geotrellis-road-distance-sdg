@@ -4,13 +4,13 @@ scalaVersion := "2.11.12"
 organization := "geotrellis"
 
 libraryDependencies ++= Seq(
-  "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-s3" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-shapefile" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-spark" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-s3-spark" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-spark-testkit" % "3.0.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-LOCAL",
+  "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.0.0-LOCAL",
+  "org.locationtech.geotrellis" %% "geotrellis-s3" % "3.0.0-LOCAL",
+  "org.locationtech.geotrellis" %% "geotrellis-shapefile" % "3.0.0-LOCAL",
+  "org.locationtech.geotrellis" %% "geotrellis-spark" % "3.0.0-LOCAL",
+  "org.locationtech.geotrellis" %% "geotrellis-s3-spark" % "3.0.0-LOCAL",
+  "org.locationtech.geotrellis" %% "geotrellis-spark-testkit" % "3.0.0-LOCAL",
   "org.apache.spark" %% "spark-core" % "2.4.1" % Provided,
   "org.apache.spark" %% "spark-hive" % "2.4.1" % Provided,
   "org.locationtech.geomesa" %% "geomesa-spark-jts" % "2.3.0",

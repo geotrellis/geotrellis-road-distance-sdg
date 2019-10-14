@@ -5,11 +5,16 @@ import geotrellis.proj4._
 import geotrellis.qatiles.{OsmQaTiles, RoadTags}
 import geotrellis.raster.rasterize.Rasterizer
 import geotrellis.raster._
+import geotrellis.raster.resample.Bilinear
 import geotrellis.raster.io.geotiff.compression.DeflateCompression
 import geotrellis.raster.io.geotiff.tags.codes.CompressionType
 import geotrellis.raster.io.geotiff.{GeoTiffBuilder, GeoTiffOptions, SinglebandGeoTiff, Tags, Tiled}
+import geotrellis.raster.summary.polygonal.visitors.SumVisitor
+import geotrellis.raster.summary.polygonal._
 import geotrellis.spark.{ContextRDD, TileLayerRDD}
+import geotrellis.spark.summary.polygonal.RDDPolygonalSummary
 import geotrellis.vector._
+import geotrellis.vector.io.json._
 import geotrellis.vectortile.VectorTile
 
 import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner}
@@ -23,6 +28,9 @@ import spire.syntax.cfor._
 
 import org.log4s._
 
+import _root_.io.circe._
+import _root_.io.circe.syntax._
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -33,6 +41,8 @@ import java.net.URI
 
 /**
   * Here we're going to start from country mbtiles and then do ranged reads
+  * 
+  * grump: https://sedac.ciesin.columbia.edu/data/set/grump-v1-urban-extents
   */
 class PopulationNearRoadsJob(
   country: Country,
@@ -45,12 +55,12 @@ class PopulationNearRoadsJob(
 
   @transient private[this] lazy val logger = getLogger
 
-  @transient lazy val rasterSource = country.rasterSource.reprojectToGrid(crs, layout)
+  @transient lazy val rasterSource = country.rasterSource.reprojectToGrid(crs, layout, Bilinear)
 
   @transient lazy val layoutTileSource: LayoutTileSource[SpatialKey] =
     LayoutTileSource.spatial(rasterSource, layout)
 
-  val wsCountryBorder: MultiPolygon = country.boundary.reproject(LatLng, layoutTileSource.source.crs)
+  val wsCountryBorder: MultiPolygon = country.boundary.reproject(LatLng, crs)
   val countryRdd: RDD[Country] = spark.sparkContext.parallelize(Array(country), 1)
 
   // Generate per-country COG regions we will need to read.
@@ -70,7 +80,7 @@ class PopulationNearRoadsJob(
     new HashPartitioner(partitions)
   }
 
-  // Each buffered road "overflowed", we need to join it back up, not going to trim it tough
+  // Each buffered road "overflowed", we need to join it back up, not going to trim it though
   val roadMaskRdd: RDD[(SpatialKey, MutableArrayTile)] = {
     val allKeysRdd = countryRdd.flatMap { country =>
       val qaTiles = OsmQaTiles.fetchFor(country)
@@ -88,13 +98,14 @@ class PopulationNearRoadsJob(
 
   // We have RDD of countries and COG keys we will need to read.
   // However, there could be pop regions NOT covered by COGs that we still need to read
-  // So we should consider all regions available form WorldPop and join them to vectors
+  // So we should consider all regions available from WorldPop and join them to vectors
 
   // TODO: try read and tile approach for performance
   val grumpMaskRdd: RDD[(SpatialKey, Tile)] =
     Grump.masksForBoundary(grumpRdd, layout, wsCountryBorder, partitioner)
       .setName(s"${country.code} GRUMP Mask")
 
+  // Layer of all population
   val popRegions: RDD[(SpatialKey, SummaryRegion)] =
     regionsRdd.
       cogroup(roadMaskRdd, grumpMaskRdd, partitioner).
@@ -110,6 +121,7 @@ class PopulationNearRoadsJob(
           })
       }
 
+  // Layer of regions where people are not served (w/in 2km of) an all weather road
   val forgottenLayer: TileLayerRDD[SpatialKey] = {
     val rdd = popRegions.flatMap { case (key, region) =>
       region.forgottenPopTile.map(tile => (key, tile))
@@ -121,6 +133,82 @@ class PopulationNearRoadsJob(
       rasterSource.crs, KeyBounds(layout.mapTransform.extentToBounds(rasterSource.extent)))
 
     ContextRDD(rdd, md)
+  }
+
+  val servedLayer: TileLayerRDD[SpatialKey] = {
+    val rdd = popRegions.flatMap { case (key, region) =>
+      region.servedPopTile.map(tile => (key, tile))
+    }
+
+    // This is the first time in the job flow we're trying to read COG on driver, log for tracing
+    logger.info(s"Reading COG: ${rasterSource.name}")
+    val md = TileLayerMetadata(rasterSource.cellType, layout, rasterSource.extent,
+      rasterSource.crs, KeyBounds(layout.mapTransform.extentToBounds(rasterSource.extent)))
+
+    ContextRDD(rdd, md)
+  }
+
+  @transient lazy val vtileLayout = ZoomedLayoutScheme(WebMercator)
+
+  // Construct an 8x8 grid of polygons for each tile at the specified zoom level
+  // cf https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
+  def vtilePolyGrid(zoom: Int): RDD[Geometry] = {
+    val level = vtileLayout.levelForZoom(zoom + 4).layout
+    val vtileTransform = level.mapTransform
+
+    countryRdd.flatMap({ country =>
+      // WARN: who says these COGs exists there at all (USA does not) ?
+      logger.info(s"Reading: $country ${layoutTileSource.source.name}")
+      val countryGeom = wsCountryBorder.reproject(crs, WebMercator)
+      val keyPolys = vtileTransform.keysForGeometry(countryGeom).map { key =>
+        vtileTransform.keyToExtent(key)
+          .toPolygon
+          .asInstanceOf[Geometry]
+      }
+      keyPolys
+    }).setName(s"${country.code} VTile Regions").cache()
+  }
+
+  def forgottenVTiles(zoom: Int): RDD[Feature[Geometry, Double]] = {
+    val polyGrid = vtilePolyGrid(zoom)
+    RDDPolygonalSummary(
+      forgottenLayer,
+      polyGrid,
+      new SumVisitor.TileSumVisitor,
+      Rasterizer.Options(includePartial=true, PixelIsArea)
+    ).map({ feature =>
+      feature.mapData {
+        case NoIntersection => 0.0
+        case Summary(v) => v.value
+      }
+    })
+  }
+
+  def keyedForgottenVTiles(zoom: Int): RDD[(SpatialKey, (SpatialKey, Feature[Geometry, Double]))] = {
+    val vtiles = forgottenVTiles(zoom)
+    val layoutDefinition: LayoutDefinition = vtileLayout.levelForZoom(zoom).layout
+    VTileUtil.keyToLayout(vtiles, layoutDefinition)
+  }
+
+  def servedVTiles(zoom: Int): RDD[Feature[Geometry, Double]] = {
+    val polyGrid = vtilePolyGrid(zoom)
+    RDDPolygonalSummary(
+      servedLayer,
+      polyGrid,
+      new SumVisitor.TileSumVisitor,
+      Rasterizer.Options(includePartial=true, PixelIsArea)
+    ).map({ feature =>
+      feature.mapData {
+        case NoIntersection => 0.0
+        case Summary(v) => v.value
+      }
+    })
+  }
+
+  def keyedServedVTiles(zoom: Int): RDD[(SpatialKey, (SpatialKey, Feature[Geometry, Double]))] = {
+    val vtiles = servedVTiles(zoom)
+    val layoutDefinition: LayoutDefinition = vtileLayout.levelForZoom(zoom).layout
+    VTileUtil.keyToLayout(vtiles, layoutDefinition)
   }
 
   lazy val result: (PopulationSummary, StreamingHistogram) =
