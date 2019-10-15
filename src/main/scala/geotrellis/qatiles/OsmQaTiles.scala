@@ -16,7 +16,6 @@
  */
 package geotrellis.qatiles
 
-import com.typesafe.scalalogging.LazyLogging
 import geotrellis.layer.{LayoutDefinition, SpatialKey, ZoomedLayoutScheme}
 import geotrellis.vectortile.VectorTile
 import geotrellis.proj4._
@@ -34,6 +33,8 @@ import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
+
+import org.log4s._
 
 import scala.util.Try
 import scalaj.http._
@@ -66,7 +67,10 @@ class OsmQaTiles(
   }
 }
 
-object OsmQaTiles extends LazyLogging {
+object OsmQaTiles {
+
+  @transient private[this] lazy val logger = getLogger
+
   final val BASE_URL: String = "https://s3.amazonaws.com/mapbox/osm-qa-tiles-production/latest.country/"
 
   /** Downloads, throws  */

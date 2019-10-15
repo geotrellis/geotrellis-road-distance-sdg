@@ -1,8 +1,5 @@
 package geotrellis.sdg
 
-import java.net.URI
-
-import com.typesafe.scalalogging.LazyLogging
 import geotrellis.layer._
 import geotrellis.proj4._
 import geotrellis.qatiles.{OsmQaTiles, RoadTags}
@@ -14,6 +11,7 @@ import geotrellis.raster.io.geotiff.{GeoTiffBuilder, GeoTiffOptions, SinglebandG
 import geotrellis.spark.{ContextRDD, TileLayerRDD}
 import geotrellis.vector._
 import geotrellis.vectortile.VectorTile
+
 import org.apache.spark.{HashPartitioner, Partitioner, RangePartitioner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -21,12 +19,16 @@ import org.apache.spark.storage.StorageLevel
 import org.locationtech.jts.geom.TopologyException
 import org.locationtech.jts.operation.union.{CascadedPolygonUnion, UnaryUnionOp}
 
+import spire.syntax.cfor._
+
+import org.log4s._
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
-import spire.syntax.cfor._
-
 import scala.concurrent.{Await, Future}
+
+import java.net.URI
 
 
 /**
@@ -38,8 +40,10 @@ class PopulationNearRoadsJob(
   layout: LayoutDefinition,
   crs: CRS,
   roadFilter: RoadTags => Boolean
-)(implicit spark: SparkSession) extends LazyLogging with Serializable {
+)(implicit spark: SparkSession) extends Serializable {
   import PopulationNearRoadsJob._
+
+  @transient private[this] lazy val logger = getLogger
 
   @transient lazy val rasterSource = country.rasterSource.reprojectToGrid(crs, layout)
 
@@ -133,7 +137,10 @@ class PopulationNearRoadsJob(
 }
 
 
-object PopulationNearRoadsJob extends LazyLogging {
+object PopulationNearRoadsJob {
+
+  @transient private[this] lazy val logger = getLogger
+
   /** Error prone process where we do the best we can (deprecated)
     * TopologyException exceptions happen on union
     */
