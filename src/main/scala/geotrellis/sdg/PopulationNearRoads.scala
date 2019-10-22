@@ -1,27 +1,17 @@
 package geotrellis.sdg
 
+import geotrellis.layer._
+import geotrellis.proj4.LatLng
 import geotrellis.vector._
 import geotrellis.vector.io.json.JsonFeatureCollection
-import geotrellis.layer.LayoutDefinition
-import geotrellis.proj4.LatLng
-import geotrellis.raster.io.geotiff.compression.DeflateCompression
-import geotrellis.raster.io.geotiff.{GeoTiffBuilder, GeoTiffOptions, Tags, Tiled}
-
 import cats.implicits._
-import cats.syntax.list._
-import cats.data.Validated
-
 import com.monovore.decline._
-
 import org.locationtech.geomesa.spark.jts._
-
 import _root_.io.circe.syntax._
-
 import org.apache.spark.storage.StorageLevel
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark._
 import org.apache.spark.sql._
-
 import java.io.PrintWriter
 import java.net.URI
 
@@ -50,6 +40,15 @@ object PopulationNearRoads extends CommandApp(
       help = "Catalog path to for saving masked WorldPop layers").
       orNone
 
+    val outputTileLayerOpt = Opts.option[URI](long = "outputTileLayer",
+      help = "The URI to which the forgotten pop vector tile layer should be saved. Must be a file or s3 URI").
+      orNone
+
+    val tilePixelScaleOpt = Opts.option[Int](
+      long = "pixelScale",
+      help = "Scaling factor for tile pixel size. The higher the number the smaller the pixels.")
+      .withDefault(4)
+
     val partitions = Opts.option[Int]("partitions",
       help = "spark.default.parallelism").
       orNone
@@ -57,8 +56,8 @@ object PopulationNearRoads extends CommandApp(
     // TODO: Add --playbook parameter that allows swapping countries.csv
     // TODO: Add option to save JSON without country borders
 
-    (countryOpt, excludeOpt, outputPath, outputCatalogOpt, partitions).mapN {
-      (countriesInclude, excludeCountries, output, outputCatalog, partitionNum) =>
+    (countryOpt, excludeOpt, outputPath, outputCatalogOpt, outputTileLayerOpt, tilePixelScaleOpt, partitions).mapN {
+      (countriesInclude, excludeCountries, output, outputCatalog, outputTileLayer, tilePixelScale, partitionNum) =>
 
       System.setSecurityManager(null)
       val conf = new SparkConf()
@@ -105,8 +104,13 @@ object PopulationNearRoads extends CommandApp(
               OutputPyramid.saveLayer(job.forgottenLayer, histogram, uri, country.code)
             }
 
-            job.grumpMaskRdd.unpersist()
+            outputTileLayer match {
+              case Some(tileLayerUri) => job.forgottenLayerTiles(tileLayerUri, tilePixelScale)
+              case _ => println("Skipped generating forgotten pop vector tile layer. Use --outputTileLayer to save.")
+            }
+
             job.forgottenLayer.unpersist()
+            job.grumpMaskRdd.unpersist()
 
             spark.sparkContext.clearJobGroup()
             (country, summary)

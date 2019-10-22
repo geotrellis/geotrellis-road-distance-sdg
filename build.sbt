@@ -11,9 +11,11 @@ libraryDependencies ++= Seq(
   "org.locationtech.geotrellis" %% "geotrellis-spark" % "3.0.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-s3-spark" % "3.0.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-spark-testkit" % "3.0.0-SNAPSHOT",
+  "com.azavea" %% "vectorpipe" % "2.0.0-M1",
   "org.apache.spark" %% "spark-core" % "2.4.1" % Provided,
   "org.apache.spark" %% "spark-hive" % "2.4.1" % Provided,
   "org.locationtech.geomesa" %% "geomesa-spark-jts" % "2.3.0",
+  "org.log4s" %% "log4s" % "1.8.2",
   "org.tpolecat" %% "doobie-core" % "0.5.2",
   "org.xerial" % "sqlite-jdbc" % "3.28.0",
   // "org.geotools" % "gt-geopkg" % "21.2", // GeoTools version currently used by GT 3.0.0-SNAPSHOT
@@ -29,7 +31,8 @@ externalResolvers := Seq(
   "locationtech-releases" at "https://repo.locationtech.org/content/repositories/releases/",
   "locationtech-snapshots" at "https://repo.locationtech.org/content/repositories/snapshots/",
   Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns),
-  Resolver.bintrayRepo("azavea", "geotrellis")
+  Resolver.bintrayRepo("azavea", "geotrellis"),
+  Resolver.bintrayRepo("azavea", "maven")
 )
 
 test in assembly := {}
