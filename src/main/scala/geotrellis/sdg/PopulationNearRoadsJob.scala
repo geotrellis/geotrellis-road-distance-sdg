@@ -137,7 +137,7 @@ class PopulationNearRoadsJob(
           val (lon, lat) = re.gridToMap(col, row)
           // Higher number makes larger hexagons
           // Zero means that our starting maxZoom == h3 hex "resolution"
-          val hexZoomOffset = 1
+          val hexZoomOffset = 2
           val h3Index = h3.geoToH3Address(lat, lon, maxZoom - hexZoomOffset)
           (h3Index, v)
         }
