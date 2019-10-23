@@ -13,7 +13,7 @@ import geotrellis.vectortile.VectorTile
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.{col, expr, udf}
+import org.apache.spark.sql.functions.col
 import org.locationtech.jts.geom.TopologyException
 import org.locationtech.jts.operation.union.CascadedPolygonUnion
 import org.log4s._
@@ -23,6 +23,8 @@ import vectorpipe.VectorPipe
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import java.net.URI
+
+import com.uber.h3core.H3Core
 
 /**
   * Here we're going to start from country mbtiles and then do ranged reads
@@ -116,19 +118,14 @@ class PopulationNearRoadsJob(
     ContextRDD(rdd, md)
   }
 
-  def forgottenLayerTiles(outputUri: URI, pixelScale: Int): Unit = {
+  def forgottenLayerTiles(outputUri: URI): Unit = {
     import spark.implicits._
-    val maxZoom = 12
+    val maxZoom = 10
     val minZoom = 6
-    // Tweak this value by powers of 2 to increase or reduce the pixel size in the output
-    // Higher number == smaller pixels
-    val pixelsPerTile = math.pow(2, pixelScale).toInt
-    val wmLayoutScheme = ZoomedLayoutScheme(WebMercator, pixelsPerTile)
-    val wmLayout: LayoutDefinition = wmLayoutScheme.levelForZoom(maxZoom).layout
-    val latLngToWebMercator = Transform(LatLng, WebMercator)
 
-    val gridPointsRdd: RDD[(Long, Long, Double)] = forgottenLayer.flatMap {
+    val gridPointsRdd: RDD[(String, Double)] = forgottenLayer.flatMap {
       case (key: SpatialKey, tile: Tile) => {
+        val h3: H3Core = H3Core.newInstance
         val tileExtent = key.extent(layout)
         val re = RasterExtent(tileExtent, tile)
         for {
@@ -138,18 +135,18 @@ class PopulationNearRoadsJob(
           if isData(v)
         } yield {
           val (lon, lat) = re.gridToMap(col, row)
-          val point = Point(lon, lat)
-          val wmPoint = point.reproject(latLngToWebMercator)
-          val (x, y) = wmLayout.mapToGrid(wmPoint)
-          (x, y, v)
+          // Higher number makes larger hexagons
+          // Zero means that our starting maxZoom == h3 hex "resolution"
+          val hexZoomOffset = 2
+          val h3Index = h3.geoToH3Address(lat, lon, maxZoom - hexZoomOffset)
+          (h3Index, v)
         }
       }
     }
 
     val pipeline = ForgottenPopPipeline(
       "geom",
-      URI.create(s"${outputUri.toString}/x$pixelScale"),
-      wmLayoutScheme,
+      outputUri,
       maxZoom
     )
     val vpOptions = VectorPipe.Options(
@@ -162,8 +159,8 @@ class PopulationNearRoadsJob(
     )
 
     val gridPointsDf = gridPointsRdd
-      .toDF("x", "y", "pop")
-      .withColumn("geom", pipeline.geomUdf(wmLayout)(col("x"), col("y")))
+      .toDF("h3Index", "pop")
+      .withColumn("geom", pipeline.geomUdf(col("h3Index")))
     VectorPipe(gridPointsDf, pipeline, vpOptions)
   }
 

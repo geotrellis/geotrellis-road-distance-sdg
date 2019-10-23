@@ -44,11 +44,6 @@ object PopulationNearRoads extends CommandApp(
       help = "The URI to which the forgotten pop vector tile layer should be saved. Must be a file or s3 URI").
       orNone
 
-    val tilePixelScaleOpt = Opts.option[Int](
-      long = "pixelScale",
-      help = "Scaling factor for tile pixel size. The higher the number the smaller the pixels.")
-      .withDefault(4)
-
     val partitions = Opts.option[Int]("partitions",
       help = "spark.default.parallelism").
       orNone
@@ -56,8 +51,8 @@ object PopulationNearRoads extends CommandApp(
     // TODO: Add --playbook parameter that allows swapping countries.csv
     // TODO: Add option to save JSON without country borders
 
-    (countryOpt, excludeOpt, outputPath, outputCatalogOpt, outputTileLayerOpt, tilePixelScaleOpt, partitions).mapN {
-      (countriesInclude, excludeCountries, output, outputCatalog, outputTileLayer, tilePixelScale, partitionNum) =>
+    (countryOpt, excludeOpt, outputPath, outputCatalogOpt, outputTileLayerOpt, partitions).mapN {
+      (countriesInclude, excludeCountries, output, outputCatalog, outputTileLayer, partitionNum) =>
 
       System.setSecurityManager(null)
       val conf = new SparkConf()
@@ -105,7 +100,7 @@ object PopulationNearRoads extends CommandApp(
             }
 
             outputTileLayer match {
-              case Some(tileLayerUri) => job.forgottenLayerTiles(tileLayerUri, tilePixelScale)
+              case Some(tileLayerUri) => job.forgottenLayerTiles(tileLayerUri)
               case _ => println("Skipped generating forgotten pop vector tile layer. Use --outputTileLayer to save.")
             }
 
