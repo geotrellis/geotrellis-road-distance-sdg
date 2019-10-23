@@ -1,9 +1,10 @@
 package geotrellis.qatiles
 
-import geotrellis.vectortile.{VString, Value}
+import geotrellis.vectortile.{VInt64, VString, Value}
 
 /** Container for relevant OSM tags on road features */
-case class RoadTags(highway: Option[String], surface: Option[String]) {
+case class RoadTags(id: Option[Long], highway: Option[String], surface: Option[String]) {
+
   /** Assume road is motor road if not explicitly tagged as foot path */
   def isStrictlyMotorRoad: Boolean = highway match {
     case Some(v) if RoadTags.highwayRoadValues.contains(v) => true
@@ -28,15 +29,23 @@ case class RoadTags(highway: Option[String], surface: Option[String]) {
 object RoadTags {
   def apply(tags: Map[String, Value]): RoadTags = {
     new RoadTags(
+      tags.get("id").collect({ case VInt64(i) => i }),
       tags.get("highway").collect({ case VString(s) => s }),
       tags.get("surface").collect({ case VString(s) => s })
     )
   }
 
+  /** Highway values for client calculations */
+  final val includedValues = Array(
+    "trunk", "primary", "secondary", "tertiary"
+  )
+
   /** Highway values that are motor roads */
   final val highwayRoadValues = Array(
-    "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified",
-    "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link", "living_street", "service"
+    "trunk", "primary", "secondary", "tertiary",
+    "motorway", "unclassified",
+    "motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link",
+    "living_street", "service"
   )
 
   /** Highway values that presents pedestrian road */

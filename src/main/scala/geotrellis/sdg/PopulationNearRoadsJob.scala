@@ -13,7 +13,7 @@ import geotrellis.vectortile.VectorTile
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, udf}
 import org.locationtech.jts.geom.TopologyException
 import org.locationtech.jts.operation.union.CascadedPolygonUnion
 import org.log4s._
@@ -34,7 +34,9 @@ class PopulationNearRoadsJob(
   grumpRdd: RDD[Geometry],
   layout: LayoutDefinition,
   crs: CRS,
-  roadFilter: RoadTags => Boolean
+  roadFilter: RoadTags => Boolean,
+  maxZoom: Int,
+  minZoom: Int
 )(implicit spark: SparkSession) extends Serializable {
   import PopulationNearRoadsJob._
 
@@ -65,21 +67,33 @@ class PopulationNearRoadsJob(
     new HashPartitioner(partitions)
   }
 
-  // Each buffered road "overflowed", we need to join it back up, not going to trim it tough
-  val roadMaskRdd: RDD[(SpatialKey, MutableArrayTile)] = {
+  val roadsRdd: RDD[(SpatialKey, Seq[Feature[MultiLineString, RoadTags]])] = {
+    val filter = { t: RoadTags => roadFilter(t) || t.isPossiblyMotorRoad }
     val allKeysRdd = countryRdd.flatMap { country =>
       val qaTiles = OsmQaTiles.fetchFor(country)
       qaTiles.allKeys.map { key => (key, Unit) }
     }.setName(s"${country.code} MBTile Keys").cache()
 
-    allKeysRdd.partitionBy(partitioner).flatMap { case (key, _) =>
+    allKeysRdd.partitionBy(partitioner).map { case (key, _) =>
       val qaTiles = OsmQaTiles.fetchFor(country)
       val row = qaTiles.fetchRow(key).get
-      val roads: Seq[MultiLineString] = extractRoads(row.tile, roadFilter)
-      val buffered = roads.map(GeometryUtils.bufferByMeters(_, WebMercator, layoutTileSource.source.crs, meters = 2000))
-      burnRoadMask(layoutTileSource.layout, buffered)
+      val roads = extractRoads(row.tile, filter)
+      (key, roads)
     }
-  }.reduceByKey(partitioner, (l, r) => combineMasks(l, r))
+  }
+
+    // Each buffered road "overflowed", we need to join it back up, not going to trim it tough
+  val roadMaskRdd: RDD[(SpatialKey, MutableArrayTile)] = {
+    roadsRdd
+      .flatMap { case (_, roads) =>
+        val buffered = roads
+          .filter(f => roadFilter(f.data))
+          .map(_.geom)
+          .map(GeometryUtils.bufferByMeters(_, WebMercator, layoutTileSource.source.crs, meters = 2000))
+        burnRoadMask(layoutTileSource.layout, buffered)
+      }
+      .reduceByKey(partitioner, (l, r) => combineMasks(l, r))
+  }
 
   // We have RDD of countries and COG keys we will need to read.
   // However, there could be pop regions NOT covered by COGs that we still need to read
@@ -118,11 +132,39 @@ class PopulationNearRoadsJob(
     ContextRDD(rdd, md)
   }
 
+  def roadLayerTiles(outputUri: URI): Unit = {
+    import spark.implicits._
+
+    val filteredRoadsWithTagsRdd: RDD[(SpatialKey, MultiLineString, Long, String, String, Boolean)] =
+      roadsRdd
+        .flatMapValues(identity(_))
+        .map { case (key: SpatialKey, feature: Feature[MultiLineString, RoadTags]) =>
+          val tags = feature.data
+          val isIncluded = roadFilter(tags)
+          (key, feature.geom, tags.id.getOrElse(-1), tags.highway.getOrElse(""), tags.surface.getOrElse(""), isIncluded)
+        }
+    val filteredRoadsWithTagsDf = filteredRoadsWithTagsRdd
+      .toDF("key", "geom", "osmId", "highway", "surface", "isIncluded")
+
+    val pipeline = FilteredRoadsPipeline(
+      "geom",
+      outputUri,
+      reduceToIncludedZoom = maxZoom - 1
+    )
+    val vpOptions = VectorPipe.Options(
+      maxZoom = maxZoom,
+      minZoom = Some(minZoom),
+      srcCRS = WebMercator,
+      destCRS = None,
+      useCaching = false,
+      orderAreas = false
+    )
+
+    VectorPipe(filteredRoadsWithTagsDf, pipeline, vpOptions)
+  }
+
   def forgottenLayerTiles(outputUri: URI): Unit = {
     import spark.implicits._
-    val maxZoom = 10
-    val minZoom = 6
-
     val gridPointsRdd: RDD[(String, Double)] = forgottenLayer.flatMap {
       case (key: SpatialKey, tile: Tile) => {
         val h3: H3Core = H3Core.newInstance
@@ -137,7 +179,7 @@ class PopulationNearRoadsJob(
           val (lon, lat) = re.gridToMap(col, row)
           // Higher number makes larger hexagons
           // Zero means that our starting maxZoom == h3 hex "resolution"
-          val hexZoomOffset = 2
+          val hexZoomOffset = 0
           val h3Index = h3.geoToH3Address(lat, lon, maxZoom - hexZoomOffset)
           (h3Index, v)
         }
@@ -237,13 +279,13 @@ object PopulationNearRoadsJob {
    * @param tile MapBox OSM VectorTile, assumed to have "osm" layer
    * @param filter filter function on highway tag and surface tag
    */
-  def extractRoads(tile: VectorTile, filter: RoadTags => Boolean): Seq[MultiLineString] = {
+  def extractRoads(tile: VectorTile, filter: RoadTags => Boolean): Seq[Feature[MultiLineString, RoadTags]] = {
     tile.layers("osm").lines.
       filter(f => filter(RoadTags(f.data))).
-      map(f => MultiLineString(f.geom)) ++
+      map(f => Feature(MultiLineString(f.geom), RoadTags(f.data))) ++
     tile.layers("osm").multiLines.
       filter(f => filter(RoadTags(f.data))).
-      map(_.geom)
+      map(f => Feature(f.geom, RoadTags(f.data)))
   }
   /** Save country as GeoTIFF for inspection
    * @note This method relies on collecting layer tiles to the master.
