@@ -4,6 +4,7 @@ scalaVersion := "2.11.12"
 organization := "geotrellis"
 
 libraryDependencies ++= Seq(
+  "com.uber" % "h3" % "3.6.0",
   "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.0.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-s3" % "3.0.0-SNAPSHOT",
