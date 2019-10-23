@@ -13,7 +13,7 @@ import geotrellis.vectortile.VectorTile
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.{col, expr, udf}
+import org.apache.spark.sql.functions.col
 import org.locationtech.jts.geom.TopologyException
 import org.locationtech.jts.operation.union.CascadedPolygonUnion
 import org.log4s._

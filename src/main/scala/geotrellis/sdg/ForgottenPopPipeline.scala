@@ -4,7 +4,6 @@ import collection.JavaConverters._
 import java.net.URI
 
 import com.uber.h3core._
-import com.uber.h3core.util._
 import geotrellis.layer._
 import geotrellis.proj4._
 import geotrellis.vector._
@@ -16,14 +15,11 @@ import vectorpipe.vectortile._
 
 /**
   * VectorPipe Pipeline to sum the population associated with an x/y coordinate
-  * in the rasterLayoutScheme space. It outputs polygons that have the aggregated
+  * in the rasterLayoutScheme space. It outputs hex polygons that have the aggregated
   * value across all geometries under the polygon as a vector tile layer.
   *
   * The vector tile layer in the output is "data" and the population sum is stored
   * in the property "population" of each polygon geometry.
-  *
-  * The size of the output polygons is determined by the tileSize of the passed
-  * rasterLayoutScheme. Larger tileSize == smaller polygon "pixels".
   *
   * This pipeline is fairly generic and could be re-used for any reduction
   * operation over a single value.
