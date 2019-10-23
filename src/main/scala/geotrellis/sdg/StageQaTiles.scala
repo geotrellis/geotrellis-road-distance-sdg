@@ -8,7 +8,10 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark._
 import org.apache.spark.sql._
 import org.locationtech.geomesa.spark.jts._
+
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
+
+import java.io._
 
 /**
  * Copy QA tiles from S3 to HDFS to avoid reading them
@@ -34,15 +37,20 @@ object StageQaTiles extends CommandApp(
     spark.sparkContext.
       parallelize(countries.toList, countries.length).
         foreach { country =>
-        val path = new Path(s"hdfs:///${country.code}.mbtiles.gz")
-        val url = new AmazonS3URI(country.mapboxQaTilesUrl)
-
-        println(s"Copying $country: ${country.mapboxQaTilesUrl} to $path")
-
-        val fs = path.getFileSystem(new Configuration())
-        val os = fs.create(path)
-        val obj = GetObjectRequest.builder().bucket(url.getBucket).key(url.getKey).build()
-        val is = S3ClientProducer.get().getObject(obj)
+          val (is, os): (InputStream, OutputStream) = country match {
+            case cl: CountryLookup =>
+              val path = new Path(s"hdfs:///${cl.code}.mbtiles.gz")
+              val url = new AmazonS3URI(cl.mapboxQaTilesUrl)
+              println(s"Copying $country: ${cl.mapboxQaTilesUrl} to $path")
+              val fs = path.getFileSystem(new Configuration())
+              val os = fs.create(path)
+              val obj = GetObjectRequest.builder().bucket(url.getBucket).key(url.getKey).build()
+              val is = S3ClientProducer.get().getObject(obj)
+              (is, os)
+            case _ =>
+              println("QA Tiles are only used when results are computed from scratch; provided imagery should have already accounted for road networks")
+              sys.exit()
+          }
 
         try {
           IOUtils.copy(is, os)

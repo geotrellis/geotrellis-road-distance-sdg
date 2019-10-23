@@ -87,7 +87,7 @@ object OsmQaTiles {
 
   private val activeDownloads: TrieMap[Country, OsmQaTiles] = TrieMap.empty
 
-  def fetchFor(country: Country): OsmQaTiles = activeDownloads.synchronized {
+  def fetchFor(country: CountryLookup): OsmQaTiles = activeDownloads.synchronized {
     activeDownloads.getOrElseUpdate(country, {
       //val sourceUri = OsmQaTiles.uriFromCode(country.code)
       val source = new Path(s"/${country.code}.mbtiles.gz") // default is HDFS root

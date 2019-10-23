@@ -10,12 +10,26 @@ import cats.syntax.list._
 
 import scala.collection.concurrent.TrieMap
 
+trait Country {
+  def name: String
+  def boundary: MultiPolygon
+  def code: String
+  def rasterSource: RasterSource
+}
+
+case class CountryProvided(url: String) extends Country {
+  @transient lazy val rasterSource: RasterSource = GeoTiffRasterSource(url)
+  def name = url
+  def code = "PROVIDED"
+  def boundary: MultiPolygon = MultiPolygon(rasterSource.extent.toPolygon)
+}
+
 /**
  * @param name Country name, maps to MapBox QA tiles name
  * @param code three character letter country code used by WorldPop
  * @param domain code domain (ex: ISO_A3, SU_A3, WB_A3) used to lookup country boundary
  */
-case class Country(name: String, code: String, domain: String = "SU_A3") {
+case class CountryLookup(name: String, code: String, domain: String = "SU_A3") extends Country {
   @transient lazy val rasterSource: RasterSource = {
     val base = "s3://azavea-worldpop/Population/Global_2000_2020/MOSAIC_2019"
     // WorldPop doesn't know about Somaliland
@@ -37,7 +51,7 @@ case class Country(name: String, code: String, domain: String = "SU_A3") {
 }
 
 object Country {
-  @transient private lazy val rasterSourceCache = TrieMap.empty[String, RasterSource]
+  @transient private[sdg] lazy val rasterSourceCache = TrieMap.empty[String, RasterSource]
 
   val all: NonEmptyList[Country] = {
     Resource.lines("countries.csv")
@@ -47,7 +61,7 @@ object Country {
         val name = arr(0)
         val code = arr(1).toUpperCase()
         val domain = arr(2).toUpperCase()
-        Country(name, code, domain)
+        CountryLookup(name, code, domain)
       }
   }
 
@@ -64,16 +78,19 @@ object Country {
     }.toMap
   }
 
-  def fromCode(code: String): Option[Country] = {
+  def lookupFromCode(code: String): Option[Country] = {
     all.find(_.code == code)
   }
 
   implicit val countryArgument: Argument[Country] = new Argument[Country] {
     def read(string: String): Validated[NonEmptyList[String], Country] = {
-      fromCode(string) match {
-        case Some(country) => Validated.valid(country)
-        case None => Validated.invalidNel(s"Invalid country code: $string")
-      }
+      if (string.length == 3)
+        lookupFromCode(string) match {
+          case Some(country) => Validated.valid(country)
+          case None => Validated.invalidNel(s"Invalid country code: $string")
+        }
+      else
+        Validated.valid(CountryProvided(string))
     }
 
     def defaultMetavar = "WorldPop Country Code"

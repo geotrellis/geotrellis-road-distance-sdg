@@ -8,10 +8,12 @@ import cats.implicits._
 import com.monovore.decline._
 import org.locationtech.geomesa.spark.jts._
 import _root_.io.circe.syntax._
-import org.apache.spark.storage.StorageLevel
+
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark._
 import org.apache.spark.sql._
+
 import java.io.PrintWriter
 import java.net.URI
 
@@ -60,6 +62,7 @@ object PopulationNearRoads extends CommandApp(
         .setAppName("PopulationNearRoads")
         .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .set("spark.kryo.registrator", "geotrellis.spark.store.kryo.KryoRegistrator")
+        .set("spark.kryoserializer.buffer.max", "1028")
         .set("spark.task.cpus", "1")
         .set("spark.default.parallelism", partitionNum.getOrElse(123).toString)
         .set("spark.executor.extraJavaOptions", "-XX:+UseG1GC -XX:InitiatingHeapOccupancyPercent=35")
@@ -80,32 +83,42 @@ object PopulationNearRoads extends CommandApp(
 
         val result: Map[Country, PopulationSummary] =  {
           val future = Future.traverse(countries)( country => Future {
-            spark.sparkContext.setJobGroup(country.code, country.name)
-
             val rasterSource = country.rasterSource
             println(s"Reading: $country: ${rasterSource.name}")
+
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
 
-            val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng,
-              { t => t.isPossiblyMotorRoad /* && t.isStrictlyAllWeather*/ } )
+            spark.sparkContext.setJobGroup(country.code, country.name)
 
-            job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
-            job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
+            val job: PopulationNearRoadsJob = country match {
+              case cl: CountryLookup =>
+                new PopulationNearRoadsLookupJob(cl, grumpRdd, layout, LatLng,
+                  { t => t.isPossiblyMotorRoad /* && t.isStrictlyAllWeather*/ } )
+              case cp: CountryProvided =>
+                new PopulationNearRoadsProvidedJob(cp, layout, LatLng)
+            }
+
+            job.persist()
+
             val (summary, histogram) = job.result
 
-            PopulationNearRoadsJob.layerToGeoTiff(job.forgottenLayer).write(s"/tmp/sdg-${country.code}-all-roads.tif")
+            PopulationNearRoadsJob
+              .layerToGeoTiff(job.forgottenLayer)
+              .write(s"/tmp/sdg-${country.code}-all-roads.tif")
 
             outputCatalog.foreach { uri =>
               OutputPyramid.saveLayer(job.forgottenLayer, histogram, uri, country.code)
             }
 
             outputTileLayer match {
-              case Some(tileLayerUri) => job.forgottenLayerTiles(tileLayerUri)
-              case _ => println("Skipped generating forgotten pop vector tile layer. Use --outputTileLayer to save.")
+              case Some(tileLayerUri) =>
+                PopulationNearRoadsJob
+                  .forgottenLayerTiles(job.forgottenLayer, tileLayerUri, layout)
+              case _ =>
+                println("Skipped generating forgotten pop vector tile layer. Use --outputTileLayer to save.")
             }
 
-            job.forgottenLayer.unpersist()
-            job.grumpMaskRdd.unpersist()
+            job.unpersist()
 
             spark.sparkContext.clearJobGroup()
             (country, summary)
