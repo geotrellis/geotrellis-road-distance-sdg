@@ -7,9 +7,11 @@ import geotrellis.spark._
 import geotrellis.raster._
 import geotrellis.layer._
 import geotrellis.proj4.WebMercator
+import geotrellis.raster.render.ColorRamp
 import geotrellis.raster.resample.Sum
 import geotrellis.spark.store.LayerWriter
 import geotrellis.spark.store.hadoop.SaveToHadoop
+import geotrellis.spark.store.s3.SaveToS3
 import geotrellis.store.{AttributeStore, LayerId}
 import geotrellis.store.index.ZCurveKeyIndexMethod
 import org.apache.spark.SparkContext
@@ -17,10 +19,18 @@ import org.apache.spark.rdd.RDD
 
 
 object OutputPyramid {
-
+  /**
+    * Generate an image pyramid from the passed TileLayerRDD using the provided ColorRamp
+    * to construct a ColorMap with linear breaks
+    *
+    * @param layer
+    * @param colorMap
+    * @param outputPath
+    * @return
+    */
   def savePng(
     layer: TileLayerRDD[SpatialKey],
-    histogram: StreamingHistogram,
+    colorMap: ColorMap,
     outputPath: String
   ): Unit = {
     implicit val sc: SparkContext = layer.sparkContext
@@ -29,15 +39,15 @@ object OutputPyramid {
     val pyramid = Pyramid.fromLayerRDD(baseLayer, Some(baseZoom), Some(0))
 
     pyramid.levels.foreach { case (zoom, tileRdd) =>
-      val colorRamp = ColorRamps.Viridis
-      //val Some((min, max)) = histogram.minMaxValues()
-      //val breaks = for { break <- (0 to 64)} yield min + (break * (max-min) / 64)
-      val colorMap = colorRamp.toColorMap(histogram)
-
       val imageRdd: RDD[(SpatialKey, Array[Byte])] =
         tileRdd.mapValues(_.renderPng(colorMap).bytes)
 
-      SaveToHadoop(imageRdd, { (k: SpatialKey) => s"${outputPath}/${zoom}/${k.col}/${k.row}.png" })
+      val keyToPath = { k: SpatialKey => s"${outputPath}/${zoom}/${k.col}/${k.row}.png" }
+      if (outputPath.startsWith("s3")) {
+        SaveToS3(imageRdd, keyToPath)
+      } else {
+        SaveToHadoop(imageRdd, keyToPath)
+      }
     }
   }
 
