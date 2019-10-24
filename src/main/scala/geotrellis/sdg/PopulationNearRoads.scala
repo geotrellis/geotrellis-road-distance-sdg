@@ -28,7 +28,7 @@ object PopulationNearRoads extends CommandApp(
   header = "Summarize population within and without 2km of OSM roads",
   main = {
     val countryOpt = Opts.options[Country](long = "country", short = "c",
-      help = "ISO 3 country code to use for input (cf https://unstats.un.org/unsd/tradekb/knowledgebase/country-code)").
+      help = "ISO 3 country code or pre-calculated tif URL to use for input").
       withDefault(Country.all)
 
     val excludeOpt = Opts.options[Country](long = "exclude", short = "x",

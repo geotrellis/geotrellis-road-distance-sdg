@@ -30,7 +30,7 @@ import scala.collection.mutable
 import java.net.URI
 
 /**
-  * Here we're going to start from country mbtiles and then do ranged reads
+  * for running calculations from country's ISO3 code; collects OSM and GRUMP data and does masking
   */
 class PopulationNearRoadsLookupJob(
   country: CountryLookup,
@@ -118,57 +118,6 @@ class PopulationNearRoadsLookupJob(
       rasterSource.crs, KeyBounds(layout.mapTransform.extentToBounds(rasterSource.extent)))
 
     ContextRDD(rdd, md)
-  }
-
-  def forgottenLayerTiles(outputUri: URI, pixelScale: Int): Unit = {
-    import spark.implicits._
-    val maxZoom = 12
-    val minZoom = 6
-    // Tweak this value by powers of 2 to increase or reduce the pixel size in the output
-    // Higher number == smaller pixels
-    val pixelsPerTile = math.pow(2, pixelScale).toInt
-    val wmLayoutScheme = ZoomedLayoutScheme(WebMercator, pixelsPerTile)
-    val wmLayout: LayoutDefinition = wmLayoutScheme.levelForZoom(maxZoom).layout
-    val latLngToWebMercator = Transform(LatLng, WebMercator)
-
-    val gridPointsRdd: RDD[(Long, Long, Double)] = forgottenLayer.flatMap {
-      case (key: SpatialKey, tile: Tile) => {
-        val h3: H3Core = H3Core.newInstance
-        val tileExtent = key.extent(layout)
-        val re = RasterExtent(tileExtent, tile)
-        for {
-          col <- Iterator.range(0, tile.cols)
-          row <- Iterator.range(0, tile.rows)
-          v = tile.getDouble(col, row)
-          if isData(v)
-        } yield {
-          val (lon, lat) = re.gridToMap(col, row)
-          val point = Point(lon, lat)
-          val wmPoint = point.reproject(latLngToWebMercator)
-          val (x, y) = wmLayout.mapToGrid(wmPoint)
-          (x, y, v)
-        }
-      }
-    }
-
-    val pipeline = ForgottenPopPipeline(
-      "geom",
-      URI.create(s"${outputUri.toString}/x$pixelScale"),
-      maxZoom
-    )
-    val vpOptions = VectorPipe.Options(
-      maxZoom = maxZoom,
-      minZoom = Some(minZoom),
-      srcCRS = WebMercator,
-      destCRS = None,
-      useCaching = false,
-      orderAreas = false
-    )
-
-    val gridPointsDf = gridPointsRdd
-      .toDF("x", "y", "pop")
-      .withColumn("geom", pipeline.geomUdf(col("h3Index")))
-    VectorPipe(gridPointsDf, pipeline, vpOptions)
   }
 
   def persist: Unit = {

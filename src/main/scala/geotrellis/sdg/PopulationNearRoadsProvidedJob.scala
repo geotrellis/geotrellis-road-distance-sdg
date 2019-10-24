@@ -25,8 +25,8 @@ import scala.collection.mutable
 import java.net.URI
 
 /**
-  * Here we're going to start from country mbtiles and then do ranged reads
-  */
+ * for running operations on a pre-calculated tif
+ */
 class PopulationNearRoadsProvidedJob(
   countryProvided: CountryProvided,
   layout: LayoutDefinition,
