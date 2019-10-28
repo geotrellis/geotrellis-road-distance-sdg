@@ -2,6 +2,7 @@ package geotrellis.sdg
 
 import java.net.URI
 
+import com.uber.h3core.H3Core
 import geotrellis.spark.pyramid.Pyramid
 import geotrellis.spark._
 import geotrellis.raster._
@@ -16,6 +17,9 @@ import geotrellis.store.{AttributeStore, LayerId}
 import geotrellis.store.index.ZCurveKeyIndexMethod
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.col
+import vectorpipe.VectorPipe
 
 
 object OutputPyramid {
@@ -66,5 +70,64 @@ object OutputPyramid {
       if (store.layerExists(id)) writer.update(id, pyramid.levels(z))
       else writer.write(id, pyramid.levels(z), ZCurveKeyIndexMethod)
     }
+  }
+
+  /**
+    * Generates a vector tile layer of aggregated hex bins representing the
+    * underlying population in the WorldPop 100m raster.
+    *
+    * Specifically coded to only work with PopulationNearRoadsJob.forgottenLayer ATM.
+    *
+    * Utilizes the Uber H3 hex library to index and generate hex geometries.
+    *
+    * @param layer
+    * @param outputUri S3 or local file URI to write the layer to
+    * @param spark
+    */
+  def forgottenLayerHexVectorTiles(layer: TileLayerRDD[SpatialKey], outputUri: URI)(implicit spark: SparkSession): Unit = {
+    import spark.implicits._
+    val maxZoom = 10
+    val minZoom = 6
+
+    val layout = layer.metadata.layout
+    val gridPointsRdd: RDD[(String, Double)] = layer.flatMap {
+      case (key: SpatialKey, tile: Tile) => {
+        val h3: H3Core = H3Core.newInstance
+        val tileExtent = key.extent(layout)
+        val re = RasterExtent(tileExtent, tile)
+        for {
+          col <- Iterator.range(0, tile.cols)
+          row <- Iterator.range(0, tile.rows)
+          v = tile.getDouble(col, row)
+          if isData(v)
+        } yield {
+          val (lon, lat) = re.gridToMap(col, row)
+          // Higher number makes larger hexagons
+          // Zero means that our starting maxZoom == h3 hex "resolution"
+          val hexZoomOffset = 2
+          val h3Index = h3.geoToH3Address(lat, lon, maxZoom - hexZoomOffset)
+          (h3Index, v)
+        }
+      }
+    }
+
+    val pipeline = ForgottenPopPipeline(
+      "geom",
+      outputUri,
+      maxZoom
+    )
+    val vpOptions = VectorPipe.Options(
+      maxZoom = maxZoom,
+      minZoom = Some(minZoom),
+      srcCRS = WebMercator,
+      destCRS = None,
+      useCaching = false,
+      orderAreas = false
+    )
+
+    val gridPointsDf = gridPointsRdd
+      .toDF("h3Index", "pop")
+      .withColumn("geom", pipeline.geomUdf(col("h3Index")))
+    VectorPipe(gridPointsDf, pipeline, vpOptions)
   }
 }
