@@ -15,6 +15,8 @@ import org.apache.spark.sql._
 import java.io.PrintWriter
 import java.net.URI
 
+import geotrellis.qatiles.RoadTags
+
 import scala.concurrent.{Await, Future}
 
 
@@ -40,8 +42,8 @@ object PopulationNearRoads extends CommandApp(
       help = "Catalog path to for saving masked WorldPop layers").
       orNone
 
-    val outputTileLayerOpt = Opts.option[URI](long = "outputTileLayer",
-      help = "The URI to which the forgotten pop vector tile layer should be saved. Must be a file or s3 URI").
+    val tileLayerUriPrefixOpt = Opts.option[URI](long = "tileLayerUriPrefix",
+      help = "URI prefix to write vector tile layers to. Writes forgotten pop and road layers.").
       orNone
 
     val partitions = Opts.option[Int]("partitions",
@@ -51,8 +53,8 @@ object PopulationNearRoads extends CommandApp(
     // TODO: Add --playbook parameter that allows swapping countries.csv
     // TODO: Add option to save JSON without country borders
 
-    (countryOpt, excludeOpt, outputPath, outputCatalogOpt, outputTileLayerOpt, partitions).mapN {
-      (countriesInclude, excludeCountries, output, outputCatalog, outputTileLayer, partitionNum) =>
+    (countryOpt, excludeOpt, outputPath, outputCatalogOpt, tileLayerUriPrefixOpt, partitions).mapN {
+      (countriesInclude, excludeCountries, output, outputCatalog, tileLayerUriPrefix, partitionNum) =>
 
       System.setSecurityManager(null)
       val conf = new SparkConf()
@@ -87,7 +89,9 @@ object PopulationNearRoads extends CommandApp(
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
 
             val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng,
-              { t => t.isPossiblyMotorRoad /* && t.isStrictlyAllWeather*/ } )
+              { t => RoadTags.includedValues.contains(t.highway) },
+              maxZoom = 10,
+              minZoom = 6)
 
             job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
             job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
@@ -99,9 +103,12 @@ object PopulationNearRoads extends CommandApp(
               OutputPyramid.saveLayer(job.forgottenLayer, histogram, uri, country.code)
             }
 
-            outputTileLayer match {
-              case Some(tileLayerUri) => job.forgottenLayerTiles(tileLayerUri)
-              case _ => println("Skipped generating forgotten pop vector tile layer. Use --outputTileLayer to save.")
+            tileLayerUriPrefix match {
+              case Some(tileLayerUri) => {
+                job.forgottenLayerTiles(URI.create(s"$tileLayerUri/${country.code}/forgotten-pop"))
+                job.roadLayerTiles(URI.create(s"$tileLayerUri/${country.code}/roads"))
+              }
+              case _ => println("Skipped generating vector tile layers. Use --tileLayerUriPrefix to save.")
             }
 
             job.forgottenLayer.unpersist()
