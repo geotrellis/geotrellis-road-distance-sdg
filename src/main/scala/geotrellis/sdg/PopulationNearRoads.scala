@@ -88,7 +88,7 @@ object PopulationNearRoads extends CommandApp(
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
 
             val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng,
-              { t => RoadTags.includedValues.contains(t.highway) },
+              { t => RoadTags.includedValues.contains(t.highway.getOrElse("")) },
               maxZoom = 10,
               minZoom = 6)
 
