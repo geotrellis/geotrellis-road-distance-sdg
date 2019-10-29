@@ -8,7 +8,6 @@ import geotrellis.spark._
 import geotrellis.raster._
 import geotrellis.layer._
 import geotrellis.proj4.WebMercator
-import geotrellis.raster.render.ColorRamp
 import geotrellis.raster.resample.Sum
 import geotrellis.spark.store.LayerWriter
 import geotrellis.spark.store.hadoop.SaveToHadoop
@@ -19,6 +18,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
+import software.amazon.awssdk.services.s3.model.ObjectCannedACL
 import vectorpipe.VectorPipe
 
 
@@ -48,7 +48,9 @@ object OutputPyramid {
 
       val keyToPath = { k: SpatialKey => s"${outputPath}/${zoom}/${k.col}/${k.row}.png" }
       if (outputPath.startsWith("s3")) {
-        SaveToS3(imageRdd, keyToPath)
+        SaveToS3(imageRdd, keyToPath, { request =>
+          request.toBuilder.acl(ObjectCannedACL.PUBLIC_READ).build()
+        })
       } else {
         SaveToHadoop(imageRdd, keyToPath)
       }
