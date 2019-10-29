@@ -88,9 +88,7 @@ object PopulationNearRoads extends CommandApp(
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
 
             val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng,
-              { t => RoadTags.includedValues.contains(t.highway.getOrElse("")) },
-              maxZoom = 10,
-              minZoom = 6)
+              { t => RoadTags.includedValues.contains(t.highway.getOrElse("")) })
 
             job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
             job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
@@ -103,6 +101,9 @@ object PopulationNearRoads extends CommandApp(
               OutputPyramid.saveLayer(job.forgottenLayer, histogram, uri, country.code)
             }
 
+            println(s"Histogram: ${histogram.minValue}, ${histogram.maxValue}")
+            println(s"Breaks: ${breaks.mkString(",")}")
+
             tileLayerUriPrefix match {
               case Some(tileLayerUri) => {
                 OutputPyramid.savePng(
@@ -110,7 +111,11 @@ object PopulationNearRoads extends CommandApp(
                   colorMap,
                   outputPath = s"$tileLayerUri/${country.code}/forgotten-pop"
                 )
-                job.roadLayerTiles(URI.create(s"$tileLayerUri/${country.code}/roads"))
+                job.roadLayerTiles(
+                  URI.create(s"$tileLayerUri/${country.code}/roads"),
+                  maxZoom = 10,
+                  minZoom = 6
+                )
               }
               case _ => println("Skipped generating tile layers. Use --tileLayerUriPrefix to save.")
             }

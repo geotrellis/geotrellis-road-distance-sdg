@@ -32,9 +32,7 @@ class PopulationNearRoadsJob(
   grumpRdd: RDD[Geometry],
   layout: LayoutDefinition,
   crs: CRS,
-  roadFilter: RoadTags => Boolean,
-  maxZoom: Int,
-  minZoom: Int
+  roadFilter: RoadTags => Boolean
 )(implicit spark: SparkSession) extends Serializable {
   import PopulationNearRoadsJob._
 
@@ -130,7 +128,7 @@ class PopulationNearRoadsJob(
     ContextRDD(rdd, md)
   }
 
-  def roadLayerTiles(outputUri: URI): Unit = {
+  def roadLayerTiles(outputUri: URI, maxZoom: Int, minZoom: Int): Unit = {
     import spark.implicits._
 
     val filteredRoadsWithTagsRdd: RDD[(SpatialKey, MultiLineString, Long, String, String, Boolean)] =
