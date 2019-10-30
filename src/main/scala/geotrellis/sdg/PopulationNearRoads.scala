@@ -1,24 +1,23 @@
 package geotrellis.sdg
 
-import geotrellis.layer._
-import geotrellis.proj4.LatLng
-import geotrellis.vector._
-import geotrellis.vector.io.json.JsonFeatureCollection
+import java.io.PrintWriter
+import java.net.URI
+
 import cats.implicits._
 import com.monovore.decline._
-import org.locationtech.geomesa.spark.jts._
+import geotrellis.layer._
+import geotrellis.proj4.LatLng
+import geotrellis.qatiles.RoadTags
+import geotrellis.vector._
+import geotrellis.vector.io.json.JsonFeatureCollection
 import _root_.io.circe.syntax._
 import org.apache.spark.storage.StorageLevel
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark._
 import org.apache.spark.sql._
-import java.io.PrintWriter
-import java.net.URI
-
-import geotrellis.qatiles.RoadTags
+import org.locationtech.geomesa.spark.jts._
 
 import scala.concurrent.{Await, Future}
-
 
 /**
   * Summary of population within 2km of roads
@@ -80,7 +79,7 @@ object PopulationNearRoads extends CommandApp(
 
         import scala.concurrent.ExecutionContext.Implicits.global
 
-        val result: Map[Country, PopulationSummary] =  {
+        val result: List[(Country, PopulationSummary, Array[Double])] = {
           val future = Future.traverse(countries)( country => Future {
             spark.sparkContext.setJobGroup(country.code, country.name)
 
@@ -89,13 +88,12 @@ object PopulationNearRoads extends CommandApp(
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
 
             val job = new PopulationNearRoadsJob(country, grumpRdd, layout, LatLng,
-              { t => RoadTags.includedValues.contains(t.highway) },
-              maxZoom = 10,
-              minZoom = 6)
+              { t => RoadTags.includedValues.contains(t.highway.getOrElse("")) })
 
             job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
             job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
             val (summary, histogram) = job.result
+            val (colorMap, breaks) = SDGColorMaps.forgottenPop(histogram)
 
             PopulationNearRoadsJob.layerToGeoTiff(job.forgottenLayer).write(s"/tmp/sdg-${country.code}-all-roads.tif")
 
@@ -103,28 +101,39 @@ object PopulationNearRoads extends CommandApp(
               OutputPyramid.saveLayer(job.forgottenLayer, histogram, uri, country.code)
             }
 
+            println(s"Histogram: ${histogram.minValue}, ${histogram.maxValue}")
+            println(s"Breaks: ${breaks.mkString(",")}")
+
             tileLayerUriPrefix match {
               case Some(tileLayerUri) => {
-                job.forgottenLayerTiles(URI.create(s"$tileLayerUri/${country.code}/forgotten-pop"))
-                job.roadLayerTiles(URI.create(s"$tileLayerUri/${country.code}/roads"))
+                OutputPyramid.savePng(
+                  job.forgottenLayer,
+                  colorMap,
+                  outputPath = s"$tileLayerUri/${country.code}/forgotten-pop"
+                )
+                job.roadLayerTiles(
+                  URI.create(s"$tileLayerUri/${country.code}/roads"),
+                  maxZoom = 10,
+                  minZoom = 6
+                )
               }
-              case _ => println("Skipped generating vector tile layers. Use --tileLayerUriPrefix to save.")
+              case _ => println("Skipped generating tile layers. Use --tileLayerUriPrefix to save.")
             }
 
             job.forgottenLayer.unpersist()
             job.grumpMaskRdd.unpersist()
 
             spark.sparkContext.clearJobGroup()
-            (country, summary)
+            (country, summary, breaks)
           })
-          Await.result(future, scala.concurrent.duration.Duration.Inf).toMap
+          Await.result(future, scala.concurrent.duration.Duration.Inf)
         }
 
-        result.foreach({ case (c, s) => println(c.code + " " + s.report) })
+        result.foreach({ case (c, s, _) => println(c.code + " " + s.report) })
 
         val collection = JsonFeatureCollection()
-        result.foreach { case (country, summary) =>
-            val f = Feature(country.boundary, OutputProperties(country, summary).asJson)
+        result.foreach { case (country, summary, breaks) =>
+            val f = Feature(country.boundary, OutputProperties(country, summary, breaks).asJson)
             collection.add(f)
         }
 

@@ -1,5 +1,7 @@
 package geotrellis.sdg
 
+import java.net.URI
+
 import geotrellis.layer._
 import geotrellis.proj4._
 import geotrellis.qatiles.{OsmQaTiles, RoadTags}
@@ -13,7 +15,6 @@ import geotrellis.vectortile.VectorTile
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.{col, udf}
 import org.locationtech.jts.geom.TopologyException
 import org.locationtech.jts.operation.union.CascadedPolygonUnion
 import org.log4s._
@@ -22,9 +23,6 @@ import vectorpipe.VectorPipe
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import java.net.URI
-
-import com.uber.h3core.H3Core
 
 /**
   * Here we're going to start from country mbtiles and then do ranged reads
@@ -34,9 +32,7 @@ class PopulationNearRoadsJob(
   grumpRdd: RDD[Geometry],
   layout: LayoutDefinition,
   crs: CRS,
-  roadFilter: RoadTags => Boolean,
-  maxZoom: Int,
-  minZoom: Int
+  roadFilter: RoadTags => Boolean
 )(implicit spark: SparkSession) extends Serializable {
   import PopulationNearRoadsJob._
 
@@ -132,7 +128,7 @@ class PopulationNearRoadsJob(
     ContextRDD(rdd, md)
   }
 
-  def roadLayerTiles(outputUri: URI): Unit = {
+  def roadLayerTiles(outputUri: URI, maxZoom: Int, minZoom: Int): Unit = {
     import spark.implicits._
 
     val filteredRoadsWithTagsRdd: RDD[(SpatialKey, MultiLineString, Long, String, String, Boolean)] =
@@ -161,49 +157,6 @@ class PopulationNearRoadsJob(
     )
 
     VectorPipe(filteredRoadsWithTagsDf, pipeline, vpOptions)
-  }
-
-  def forgottenLayerTiles(outputUri: URI): Unit = {
-    import spark.implicits._
-    val gridPointsRdd: RDD[(String, Double)] = forgottenLayer.flatMap {
-      case (key: SpatialKey, tile: Tile) => {
-        val h3: H3Core = H3Core.newInstance
-        val tileExtent = key.extent(layout)
-        val re = RasterExtent(tileExtent, tile)
-        for {
-          col <- Iterator.range(0, tile.cols)
-          row <- Iterator.range(0, tile.rows)
-          v = tile.getDouble(col, row)
-          if isData(v)
-        } yield {
-          val (lon, lat) = re.gridToMap(col, row)
-          // Higher number makes larger hexagons
-          // Zero means that our starting maxZoom == h3 hex "resolution"
-          val hexZoomOffset = 0
-          val h3Index = h3.geoToH3Address(lat, lon, maxZoom - hexZoomOffset)
-          (h3Index, v)
-        }
-      }
-    }
-
-    val pipeline = ForgottenPopPipeline(
-      "geom",
-      outputUri,
-      maxZoom
-    )
-    val vpOptions = VectorPipe.Options(
-      maxZoom = maxZoom,
-      minZoom = Some(minZoom),
-      srcCRS = WebMercator,
-      destCRS = None,
-      useCaching = false,
-      orderAreas = false
-    )
-
-    val gridPointsDf = gridPointsRdd
-      .toDF("h3Index", "pop")
-      .withColumn("geom", pipeline.geomUdf(col("h3Index")))
-    VectorPipe(gridPointsDf, pipeline, vpOptions)
   }
 
   lazy val result: (PopulationSummary, StreamingHistogram) =
