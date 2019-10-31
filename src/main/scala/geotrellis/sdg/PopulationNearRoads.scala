@@ -108,11 +108,6 @@ object PopulationNearRoads extends CommandApp(
               case Some(tileLayerUri) => {
                 OutputPyramid.savePng(
                   job.forgottenLayer,
-                  perCountryColorMap,
-                  outputPath = s"$tileLayerUri/${country.code}/forgotten-pop"
-                )
-                OutputPyramid.savePng(
-                  job.forgottenLayer,
                   SDGColorMaps.global,
                   outputPath = s"$tileLayerUri/${country.code}/forgotten-pop-global"
                 )
