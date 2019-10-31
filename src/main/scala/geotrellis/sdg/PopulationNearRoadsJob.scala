@@ -155,11 +155,7 @@ class PopulationNearRoadsJob(
     val filteredRoadsWithTagsDf = filteredRoadsWithTagsRdd
       .toDF("key", "geom", "osmId", "highway", "surface", "isIncluded")
 
-    val pipeline = FilteredRoadsPipeline(
-      "geom",
-      outputUri,
-      reduceToIncludedZoom = maxZoom - 1
-    )
+    val pipeline = FilteredRoadsPipeline("geom", outputUri)
     val vpOptions = VectorPipe.Options(
       maxZoom = maxZoom,
       minZoom = Some(minZoom),

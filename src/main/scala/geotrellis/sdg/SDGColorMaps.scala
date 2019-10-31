@@ -42,6 +42,8 @@ object SDGColorMaps {
 
   def forgottenPop(histogram: Histogram[Double]): (ColorMap, Array[Double]) = {
     val ramp = orange9
+    // TODO: Better handle this if we ever use this method again.
+    //       Apparently at least one country has a None value for one of these.
     val Some((min, max)) = histogram.minMaxValues
     val width = (max - min) / ramp.numStops
     val linearBreaks = (1 to ramp.numStops - 1).map { v => v * width }.toArray
