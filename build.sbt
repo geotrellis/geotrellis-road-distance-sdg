@@ -5,13 +5,13 @@ organization := "geotrellis"
 
 libraryDependencies ++= Seq(
   "com.uber" % "h3" % "3.6.0",
-  "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-s3" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-shapefile" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-spark" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-s3-spark" % "3.0.0-SNAPSHOT",
-  "org.locationtech.geotrellis" %% "geotrellis-spark-testkit" % "3.0.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-vectortile" % "3.1.0",
+  "org.locationtech.geotrellis" %% "geotrellis-layer" % "3.1.0",
+  "org.locationtech.geotrellis" %% "geotrellis-s3" % "3.1.0",
+  "org.locationtech.geotrellis" %% "geotrellis-shapefile" % "3.1.0",
+  "org.locationtech.geotrellis" %% "geotrellis-spark" % "3.1.0",
+  "org.locationtech.geotrellis" %% "geotrellis-s3-spark" % "3.1.0",
+  "org.locationtech.geotrellis" %% "geotrellis-spark-testkit" % "3.1.0",
   "com.azavea" %% "vectorpipe" % "2.0.0-M1",
   "org.apache.spark" %% "spark-core" % "2.4.1" % Provided,
   "org.apache.spark" %% "spark-hive" % "2.4.1" % Provided,
@@ -19,7 +19,7 @@ libraryDependencies ++= Seq(
   "org.log4s" %% "log4s" % "1.8.2",
   "org.tpolecat" %% "doobie-core" % "0.5.2",
   "org.xerial" % "sqlite-jdbc" % "3.28.0",
-  // "org.geotools" % "gt-geopkg" % "21.2", // GeoTools version currently used by GT 3.0.0-SNAPSHOT
+  // "org.geotools" % "gt-geopkg" % "21.2", // GeoTools version currently used by GT 3.1.0
   "org.geotools" % "gt-epsg-hsql" % "21.2",
   "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.9.9",
   "com.monovore" %% "decline" % "0.5.0",
@@ -40,7 +40,7 @@ test in assembly := {}
 
 assemblyShadeRules in assembly := {
   val shadePackage = "geotrellis.sdg.shaded"
-  val gtVersion = "3.0.0-SNAPSHOT"
+  val gtVersion = "3.1.0"
   Seq(
     ShadeRule.rename("com.fasterxml.jackson.**" -> s"$shadePackage.com.fasterxml.jackson.@1")
       .inLibrary("com.networknt" % "json-schema-validator" % "0.1.7").inAll,
