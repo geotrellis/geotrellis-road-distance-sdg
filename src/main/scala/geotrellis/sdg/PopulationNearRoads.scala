@@ -93,7 +93,7 @@ object PopulationNearRoads extends CommandApp(
             job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
             job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
             val (summary, histogram) = job.result
-            val (colorMap, breaks) = SDGColorMaps.forgottenPop(histogram)
+            val (perCountryColorMap, perCountryBreaks) = SDGColorMaps.forgottenPop(histogram)
 
             PopulationNearRoadsJob.layerToGeoTiff(job.forgottenLayer).write(s"/tmp/sdg-${country.code}-all-roads.tif")
 
@@ -102,14 +102,14 @@ object PopulationNearRoads extends CommandApp(
             }
 
             println(s"Histogram: ${histogram.minValue}, ${histogram.maxValue}")
-            println(s"Breaks: ${breaks.mkString(",")}")
+            println(s"Per Country Breaks: ${perCountryBreaks.mkString(",")}")
 
             tileLayerUriPrefix match {
               case Some(tileLayerUri) => {
                 OutputPyramid.savePng(
                   job.forgottenLayer,
-                  colorMap,
-                  outputPath = s"$tileLayerUri/${country.code}/forgotten-pop"
+                  SDGColorMaps.global,
+                  outputPath = s"$tileLayerUri/${country.code}/forgotten-pop-global"
                 )
                 job.roadLayerTiles(
                   URI.create(s"$tileLayerUri/${country.code}/roads"),
@@ -124,7 +124,7 @@ object PopulationNearRoads extends CommandApp(
             job.grumpMaskRdd.unpersist()
 
             spark.sparkContext.clearJobGroup()
-            (country, summary, breaks)
+            (country, summary, perCountryBreaks)
           })
           Await.result(future, scala.concurrent.duration.Duration.Inf)
         }

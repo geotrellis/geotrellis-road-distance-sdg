@@ -27,13 +27,24 @@ object SDGColorMaps {
     0x7f2704ff
   )
 
+  val globalBreaks = Array(
+    0.5,
+    1,
+    2,
+    5,
+    10,
+    50,
+    100,
+    1000,
+    33000
+  )
+  val global = orange9.toColorMap(globalBreaks)
+
   def forgottenPop(histogram: Histogram[Double]): (ColorMap, Array[Double]) = {
     val ramp = orange9
     val Some((min, max)) = histogram.minMaxValues
     val width = (max - min) / ramp.numStops
     val linearBreaks = (1 to ramp.numStops - 1).map { v => v * width }.toArray
-
-    println(s"Linear breaks: ${(min +: linearBreaks :+ max).mkString(", ")}")
 
     // Log scale - conversion from:
     // https://stackoverflow.com/questions/19472747/convert-linear-scale-to-logarithmic
