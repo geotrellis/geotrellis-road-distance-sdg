@@ -39,7 +39,8 @@ object RenderPyramidApp extends CommandApp(
       val rasterRdd = spark.sparkContext.parallelize(rasters.toList, rasters.length).
         map( raster => RasterSource(raster.toString).reproject(WebMercator))
 
-      val layer = RasterSourceRDD.tiledLayerRDD(rasterRdd, layout, Bilinear).withContext(_.mapValues(_.band(0)))
+      val layer = RasterSourceRDD.tiledLayerRDD(rasterRdd, layout, Bilinear).
+        withContext(_.mapValues(_.band(0)).filter(r => ! r._2.isNoDataTile))
       OutputPyramid.savePng(layer, SDGColorMaps.global, outputPrefixUri.toString)
 
       spark.stop
