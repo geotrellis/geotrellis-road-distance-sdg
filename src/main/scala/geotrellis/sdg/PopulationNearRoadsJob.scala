@@ -82,7 +82,6 @@ class PopulationNearRoadsJob(
 
     // Each buffered road "overflowed", we need to join it back up, not going to trim it tough
   val roadMaskRdd: RDD[(SpatialKey, MutableArrayTile)] = {
-    // TODO: we include the buffer here, we need to convert every road to UTM ... THEN buffer it.
     roadsRdd
       .flatMap { case (_, roads) =>
         val buffered = roads
