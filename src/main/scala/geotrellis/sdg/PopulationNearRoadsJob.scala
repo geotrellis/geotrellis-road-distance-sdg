@@ -4,6 +4,7 @@ import java.net.URI
 
 import geotrellis.layer._
 import geotrellis.proj4._
+import geotrellis.proj4.util._
 import geotrellis.qatiles.{OsmQaTiles, RoadTags}
 import geotrellis.raster.rasterize.Rasterizer
 import geotrellis.raster._
@@ -32,6 +33,7 @@ class PopulationNearRoadsJob(
   grumpRdd: RDD[Geometry],
   layout: LayoutDefinition,
   crs: CRS,
+  roadHistogram: RoadHistogram,
   roadFilter: RoadTags => Boolean
 )(implicit spark: SparkSession) extends Serializable {
   import PopulationNearRoadsJob._
@@ -80,12 +82,24 @@ class PopulationNearRoadsJob(
 
     // Each buffered road "overflowed", we need to join it back up, not going to trim it tough
   val roadMaskRdd: RDD[(SpatialKey, MutableArrayTile)] = {
+    // TODO: we include the buffer here, we need to convert every road to UTM ... THEN buffer it.
     roadsRdd
       .flatMap { case (_, roads) =>
         val buffered = roads
+          .map{ road => // project to UTM and count
+            val utmZoneCrs = {
+              val center = road.getCentroid.reproject(WebMercator, LatLng)
+              UTM.getZoneCrs(center.getX, center.getY)
+            }
+            val utmRoad = road.reproject(WebMercator, utmZoneCrs)
+            val included = roadFilter(utmRoad.data)
+            roadHistogram.add((utmRoad.geom.getLength(), included, utmRoad.data))
+            // Buffer by 2KM to either size and reproject to match raster source
+            val meters = 2000
+            utmRoad.mapGeom(_.buffer(meters).reproject(utmZoneCrs, layoutTileSource.source.crs))
+          }
           .filter(f => roadFilter(f.data))
           .map(_.geom)
-          .map(GeometryUtils.bufferByMeters(_, WebMercator, layoutTileSource.source.crs, meters = 2000))
         burnRoadMask(layoutTileSource.layout, buffered)
       }
       .reduceByKey(partitioner, (l, r) => combineMasks(l, r))
