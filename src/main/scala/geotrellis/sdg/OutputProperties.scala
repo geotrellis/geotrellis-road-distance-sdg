@@ -10,15 +10,19 @@ case class OutputProperties(
   pop_rural: Double,
   pop_served: Double,
   pct_served: Double,
-  breaks: Array[Double],
-  roads: List[(RoadHistogram.Key, Double)]
+  roads_total_km: Double,
+  roads_included_km: Double,
+  breaks: Array[Double]
 )
 
 object OutputProperties {
   implicit val fooDecoder: Decoder[OutputProperties] = deriveDecoder[OutputProperties]
   implicit val fooEncoder: Encoder[OutputProperties] = deriveEncoder[OutputProperties]
 
-  def apply(country: Country, summary: PopulationSummary, breaks: Array[Double], roadHistogram: RoadHistogram): OutputProperties =
+  def apply(country: Country, summary: PopulationSummary, breaks: Array[Double], roadHistogram: RoadHistogram): OutputProperties = {
+    val included = roadHistogram.value.filter(_._1.included == true).map(_._2).sum
+    val total = roadHistogram.value.map(_._2).sum
+
     new OutputProperties(
       code = country.code,
       name = country.name,
@@ -27,7 +31,9 @@ object OutputProperties {
       pop_rural = summary.rural,
       pop_served = summary.ruralServed,
       pct_served = (summary.ruralServed / summary.rural),
-      breaks = breaks,
-      roads = roadHistogram.value.toList
+      roads_total_km = total,
+      roads_included_km = included,
+      breaks = breaks
     )
+  }
 }
