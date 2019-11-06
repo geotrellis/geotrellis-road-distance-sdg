@@ -92,7 +92,7 @@ class PopulationNearRoadsJob(
             }
             val utmRoad = road.reproject(WebMercator, utmZoneCrs)
             val included = roadFilter(utmRoad.data)
-            roadHistogram.add((utmRoad.geom.getLength(), included, utmRoad.data))
+            roadHistogram.add((utmRoad.geom.getLength() / 1000.0, included, utmRoad.data))
             // Buffer by 2KM to either size and reproject to match raster source
             val meters = 2000
             utmRoad.mapGeom(_.buffer(meters).reproject(utmZoneCrs, layoutTileSource.source.crs))
