@@ -49,11 +49,15 @@ object PopulationNearRoads extends CommandApp(
       help = "spark.default.parallelism").
       orNone
 
+    val debugOpt = Opts.flag("debug",
+      help = "Debug mode. This will write the forgotten layer to a single GeoTiff.").
+      orFalse
+
     // TODO: Add --playbook parameter that allows swapping countries.csv
     // TODO: Add option to save JSON without country borders
 
-    (countryOpt, excludeOpt, outputPath, outputCatalogOpt, tileLayerUriPrefixOpt, partitions).mapN {
-      (countriesInclude, excludeCountries, output, outputCatalog, tileLayerUriPrefix, partitionNum) =>
+    (countryOpt, excludeOpt, outputPath, outputCatalogOpt, tileLayerUriPrefixOpt, partitions, debugOpt).mapN {
+      (countriesInclude, excludeCountries, output, outputCatalog, tileLayerUriPrefix, partitionNum, debug) =>
 
       System.setSecurityManager(null)
       val conf = new SparkConf()
@@ -79,12 +83,13 @@ object PopulationNearRoads extends CommandApp(
 
         import scala.concurrent.ExecutionContext.Implicits.global
 
-        val result: List[(Country, PopulationSummary, Array[Double], RoadHistogram)] = {
+        val result: List[(Country, PopulationSummary, RoadHistogram)] = {
           val future = Future.traverse(countries)( country => Future {
             spark.sparkContext.setJobGroup(country.code, country.name)
 
             val rasterSource = country.rasterSource
             println(s"Reading: $country: ${rasterSource.name}")
+            println(s"Extent: ${country.code}: ${rasterSource.extent}")
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
             val roadHistogram = RoadHistogram.empty
             spark.sparkContext.register(roadHistogram, s"road-histogram-${country.code}")
@@ -94,16 +99,18 @@ object PopulationNearRoads extends CommandApp(
             job.grumpMaskRdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
             job.forgottenLayer.persist(StorageLevel.MEMORY_AND_DISK_SER)
             val (summary, histogram) = job.result
-            val (perCountryColorMap, perCountryBreaks) = SDGColorMaps.forgottenPop(histogram)
 
-            // PopulationNearRoadsJob.layerToGeoTiff(job.forgottenLayer).write(s"/tmp/sdg-${country.code}-all-roads.tif")
+            if (debug) {
+              PopulationNearRoadsJob
+                .layerToGeoTiff(job.forgottenLayer)
+                .write(s"/tmp/sdg-${country.code}-all-roads.tif")
+            }
 
             outputCatalog.foreach { uri =>
               OutputPyramid.saveLayer(job.forgottenLayer, histogram, uri, country.code)
             }
 
             println(s"Histogram: ${histogram.minValue}, ${histogram.maxValue}")
-            println(s"Per Country Breaks: ${perCountryBreaks.mkString(",")}")
 
             tileLayerUriPrefix match {
               case Some(tileLayerUri) => {
@@ -125,16 +132,16 @@ object PopulationNearRoads extends CommandApp(
             job.grumpMaskRdd.unpersist()
 
             spark.sparkContext.clearJobGroup()
-            (country, summary, perCountryBreaks, roadHistogram)
+            (country, summary, roadHistogram)
           })
           Await.result(future, scala.concurrent.duration.Duration.Inf)
         }
 
-        result.foreach({ case (c, s, _, _) => println(c.code + " " + s.report) })
+        result.foreach({ case (c, s, _) => println(c.code + " " + s.report) })
 
         val collection = JsonFeatureCollection()
-        result.foreach { case (country, summary, breaks, roadHistogram) =>
-            val f = Feature(country.boundary, OutputProperties(country, summary, breaks, roadHistogram).asJson)
+        result.foreach { case (country, summary, roadHistogram) =>
+            val f = Feature(country.boundary, OutputProperties(country, summary, roadHistogram).asJson)
             collection.add(f)
         }
 

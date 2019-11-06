@@ -21,7 +21,20 @@ case class Country(name: String, code: String, domain: String = "SU_A3") {
     // WorldPop doesn't know about Somaliland
     val wpCode = if (code == "SOL") "SOM" else code
     val url = s"${base}/ppp_prj_2019_${wpCode}.tif"
-    Country.rasterSourceCache.getOrElseUpdate(url, GeoTiffRasterSource(url))
+    val rs = GeoTiffRasterSource(url)
+    // Resample to custom extents for countries that cross the antimeridian
+    // This will break if any further downstream resample/reproject operations
+    // are performed due to how RasterSource builds chains of these operations.
+    val countryRasterSource = if (code == "RUS") {
+      val extent = Extent(23.0, 41.1887500, 179.70, 81.8579165)
+      rs.resampleToRegion(rs.gridExtent.createAlignedGridExtent(extent))
+    } else if (code == "FJI") {
+      val extent = Extent(176.73, -19.29, 179.70, -15.94)
+      rs.resampleToRegion(rs.gridExtent.createAlignedGridExtent(extent))
+    } else {
+      rs
+    }
+    Country.rasterSourceCache.getOrElseUpdate(url, countryRasterSource)
   }
 
   def boundary: MultiPolygon = {

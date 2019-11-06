@@ -9,14 +9,18 @@ import org.apache.spark.sql.{DataFrame, Row}
 import vectorpipe.vectortile._
 
 case class FilteredRoadsPipeline(geometryColumn: String,
-                                 baseOutputURI: URI,
-                                 reduceToIncludedZoom: Int) extends Pipeline {
+                                 baseOutputURI: URI) extends Pipeline {
+
+  val removeNotIncludedZoom: Int = 9
+  val removeTertiaryZoom: Int = 7
 
   override val layerMultiplicity: LayerMultiplicity = SingleLayer("roads")
 
   override def reduce(input: DataFrame, layoutLevel: LayoutLevel, keyColumn: String): DataFrame = {
-    if (reduceToIncludedZoom == layoutLevel.zoom) {
+    if (layoutLevel.zoom == removeNotIncludedZoom) {
       input.where("isIncluded = true")
+    } else if (layoutLevel.zoom == removeTertiaryZoom) {
+      input.where("highway <> 'tertiary'")
     } else {
       input
     }
