@@ -89,6 +89,7 @@ object PopulationNearRoads extends CommandApp(
 
             val rasterSource = country.rasterSource
             println(s"Reading: $country: ${rasterSource.name}")
+            println(s"Extent: ${country.code}: ${rasterSource.extent}")
             val layout = LayoutDefinition(rasterSource.gridExtent, 256)
             val roadHistogram = RoadHistogram.empty
             spark.sparkContext.register(roadHistogram, s"road-histogram-${country.code}")
@@ -111,13 +112,8 @@ object PopulationNearRoads extends CommandApp(
 
             println(s"Histogram: ${histogram.minValue}, ${histogram.maxValue}")
 
-            // Hack to skip countries that cross antimeridian due to
-            // TileLayerRDD.reproject failures. We didn't use the "-x" option
-            // in this case so that we can still generate statistics for this list
-            // in the geojson output: https://github.com/locationtech/geotrellis/issues/3146
-            val skipCountries: Seq[String] = Seq("FJI", "RUS")
             tileLayerUriPrefix match {
-              case Some(tileLayerUri) if !skipCountries.contains(country.code) => {
+              case Some(tileLayerUri) => {
                 OutputPyramid.savePng(
                   job.forgottenLayer,
                   SDGColorMaps.global,

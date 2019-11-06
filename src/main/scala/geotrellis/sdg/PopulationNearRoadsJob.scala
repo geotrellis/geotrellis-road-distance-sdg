@@ -40,7 +40,7 @@ class PopulationNearRoadsJob(
 
   @transient private[this] lazy val logger = getLogger
 
-  @transient lazy val rasterSource = country.rasterSource.reprojectToGrid(crs, layout)
+  @transient lazy val rasterSource = country.rasterSource
 
   @transient lazy val layoutTileSource: LayoutTileSource[SpatialKey] =
     LayoutTileSource.spatial(rasterSource, layout)
