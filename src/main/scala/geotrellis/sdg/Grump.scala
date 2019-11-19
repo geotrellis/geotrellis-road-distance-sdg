@@ -97,7 +97,7 @@ object Grump {
   def masksForBoundary(
     rdd: RDD[Geometry],
     layout: LayoutDefinition,
-    boundary: MultiPolygon,
+    boundary: Geometry,
     part: Partitioner
   ): RDD[(SpatialKey, Tile)] = {
     // prepared geometries are not serializable
