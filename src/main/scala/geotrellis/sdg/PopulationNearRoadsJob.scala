@@ -47,8 +47,7 @@ class PopulationNearRoadsJob(
 
   val wsCountryBorder: Geometry = {
     // Buffer country border to avoid clipping out tiles where WorldPop and NaturalEarth don't agree on borders
-    val b = 0.833333330000 // ~100km at equator in degrees
-    country.boundary.buffer(b).reproject(LatLng, layoutTileSource.source.crs)
+    country.boundary.buffer(2).reproject(LatLng, layoutTileSource.source.crs)
   }
   val countryRdd: RDD[Country] = spark.sparkContext.parallelize(Array(country), 1)
 
@@ -58,11 +57,7 @@ class PopulationNearRoadsJob(
     countryRdd.flatMap({ country =>
       // WARN: who says these COGs exists there at all (USA does not) ?
       logger.info(s"Reading: $country ${layoutTileSource.source.name}")
-      // Russian and USA rasters have large amount of NODATA regions that we want to clip to save cycles
-      if (country.code == "RUS" || country.code == "USA")
-        layoutTileSource.layout.mapTransform.keysForGeometry(wsCountryBorder).map { key => (key, ())}
-      else
-        layoutTileSource.keys.map(key => (key, ()))
+      layoutTileSource.layout.mapTransform.keysForGeometry(wsCountryBorder).map { key => (key, ())}
     }).setName(s"${country.code} Regions").cache()
 
   val partitioner: Partitioner = {
