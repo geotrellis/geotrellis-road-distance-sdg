@@ -9,6 +9,7 @@ import java.net.URI
 
 import geotrellis.raster.io.geotiff.GeoTiff
 import geotrellis.raster.rasterize.Rasterizer
+import geotrellis.spark.{ContextRDD, TileLayerRDD}
 import geotrellis.spark.clip.ClipToGrid
 import geotrellis.spark.clip.ClipToGrid.Predicates
 import org.apache.spark.{Partitioner, SparkContext}
@@ -99,7 +100,7 @@ object Grump {
     layout: LayoutDefinition,
     boundary: MultiPolygon,
     part: Partitioner
-  ): RDD[(SpatialKey, Tile)] = {
+  ): TileLayerRDD[SpatialKey] = {
     // prepared geometries are not serializable
     @transient lazy val prep = PreparedGeometryFactory.prepare(boundary)
 
@@ -110,8 +111,18 @@ object Grump {
     }
 
     val featureRdd = rdd.map( g => Feature(g, ()))
+    val bounds = layout.mapTransform.extentToBounds(boundary.extent)
+    //val extent = boundary.extent
+    val extent = layout.mapTransform.boundsToExtent(bounds)
 
-    ClipToGrid(featureRdd, layout,clipFeature)
+    val md = TileLayerMetadata[SpatialKey](
+      crs = LatLng,
+      cellType = BitCellType,
+      extent = extent,
+      layout = layout,
+      bounds = KeyBounds(bounds))
+
+    val tiles: RDD[(SpatialKey, Tile)] = ClipToGrid(featureRdd, layout,clipFeature)
       .groupByKey(part)
       .mapPartitions({ iter =>
         iter.map { case (key, features) =>
@@ -120,8 +131,10 @@ object Grump {
           val keyExtent = layout.mapTransform.keyToExtent(key)
           val re = RasterExtent(keyExtent, mask.cols, mask.rows)
           for (f <- features) Rasterizer.foreachCellByGeometry(f.geom, re, options) { (col, row) => mask.set(col, row, 1) }
-          (key, mask)
+          (key, mask: Tile)
         }
       }, preservesPartitioning = true)
+
+    ContextRDD(tiles, md)
   }
 }

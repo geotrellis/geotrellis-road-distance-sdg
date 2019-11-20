@@ -45,7 +45,10 @@ class PopulationNearRoadsJob(
   @transient lazy val layoutTileSource: LayoutTileSource[SpatialKey] =
     LayoutTileSource.spatial(rasterSource, layout)
 
-  val wsCountryBorder: MultiPolygon = country.boundary.reproject(LatLng, layoutTileSource.source.crs)
+  val wsCountryBorder: Geometry = {
+    // Buffer country border to avoid clipping out tiles where WorldPop and NaturalEarth don't agree on borders
+    country.boundary.buffer(2).reproject(LatLng, layoutTileSource.source.crs)
+  }
   val countryRdd: RDD[Country] = spark.sparkContext.parallelize(Array(country), 1)
 
   // Generate per-country COG regions we will need to read.
@@ -54,7 +57,11 @@ class PopulationNearRoadsJob(
     countryRdd.flatMap({ country =>
       // WARN: who says these COGs exists there at all (USA does not) ?
       logger.info(s"Reading: $country ${layoutTileSource.source.name}")
-      layoutTileSource.layout.mapTransform.keysForGeometry(wsCountryBorder).map { key => (key, ())}
+      // Russian and USA rasters have large amount of NODATA regions that we want to clip to save cycles
+      // if (country.code == "RUS" || country.code == "USA")
+        layoutTileSource.layout.mapTransform.keysForGeometry(wsCountryBorder).map { key => (key, ())}
+      // else
+        // layoutTileSource.keys.map(key => (key, ()))
     }).setName(s"${country.code} Regions").cache()
 
   val partitioner: Partitioner = {
