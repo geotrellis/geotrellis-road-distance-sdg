@@ -57,11 +57,7 @@ class PopulationNearRoadsJob(
     countryRdd.flatMap({ country =>
       // WARN: who says these COGs exists there at all (USA does not) ?
       logger.info(s"Reading: $country ${layoutTileSource.source.name}")
-      // Russian and USA rasters have large amount of NODATA regions that we want to clip to save cycles
-      // if (country.code == "RUS" || country.code == "USA")
-        layoutTileSource.layout.mapTransform.keysForGeometry(wsCountryBorder).map { key => (key, ())}
-      // else
-        // layoutTileSource.keys.map(key => (key, ()))
+      layoutTileSource.layout.mapTransform.keysForGeometry(wsCountryBorder).map { key => (key, ())}
     }).setName(s"${country.code} Regions").cache()
 
   val partitioner: Partitioner = {
